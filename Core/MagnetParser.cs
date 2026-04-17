@@ -1,7 +1,6 @@
-using System;
 using System.Text.RegularExpressions;
 
-namespace MediaDebrid.Core;
+namespace MediaDebrid_cli.Core;
 
 /// <summary>
 /// Utility methods for extracting fields from magnet URIs.

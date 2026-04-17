@@ -1,8 +1,4 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using System.CommandLine;
-using MediaDebrid_cli;
 using MediaDebrid_cli.Views;
 using Spectre.Console;
 
@@ -18,9 +14,7 @@ class Program
         Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;
-            AnsiConsole.MarkupLine("\n[yellow]Termination requested. Cleaning up...[/]");
             cts.Cancel();
-            Environment.Exit(0);
         };
 
         // ── Interactive mode (no args) ─────────────────────────────────────
@@ -65,7 +59,7 @@ class Program
         }
         catch (OperationCanceledException)
         {
-            // Graceful exit — no action needed
+            AnsiConsole.MarkupLine("\n[yellow]Termination requested. Cleaning up...[/]");
         }
     }
 }

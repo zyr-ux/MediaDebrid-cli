@@ -1,9 +1,6 @@
-using System.Text.Json.Serialization;
-using System.Collections.Generic;
+﻿using System.Text.Json.Serialization;
 
 namespace MediaDebrid_cli.Models;
-
-// ── Real-Debrid API models ─────────────────────────────────────────────────
 
 public class TorrentAddResponse
 {
@@ -71,23 +68,3 @@ public class UnrestrictResponse
     public string Download { get; set; } = string.Empty;
 }
 
-// ── Metadata models ────────────────────────────────────────────────────────
-
-public class ResolvedMetadata
-{
-    public string Title { get; set; } = string.Empty;
-    public string Year { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty;
-    public int? Season { get; set; }
-    public int? Episode { get; set; }
-}
-
-// ── Download models ────────────────────────────────────────────────────────
-
-public class DownloadProgressEventArgs : EventArgs
-{
-    public string Filename { get; set; } = string.Empty;
-    public long BytesDownloaded { get; set; }
-    public long TotalBytes { get; set; }
-    public double SpeedBytesPerSecond { get; set; }
-}

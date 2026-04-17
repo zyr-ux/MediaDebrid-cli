@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using MediaDebrid_cli.Core;
 using MediaDebrid_cli.Models;
-using MediaDebrid.Core;
 using Spectre.Console;
 
 
@@ -41,7 +40,7 @@ public class TuiApp
 
         string torrentId = string.Empty;
         TorrentInfo? info = null;
-        ResolvedMetadata? resolved = null;
+        TMDBModels? resolved = null;
 
         await AnsiConsole.Status()
             .StartAsync("Initializing...", async ctx =>
@@ -198,7 +197,7 @@ public class TuiApp
 
     // ── Private helpers ────────────────────────────────────────────────────
 
-    private static void RenderMetadataPanel(ResolvedMetadata meta, string sourceLabel)
+    private static void RenderMetadataPanel(TMDBModels meta, string sourceLabel)
     {
         var panel = new Panel(new Grid()
             .AddColumn()
@@ -215,7 +214,7 @@ public class TuiApp
         AnsiConsole.Write(panel);
     }
 
-    private void OnDownloadProgressChanged(object? sender, DownloadProgressEventArgs e)
+    private void OnDownloadProgressChanged(object? sender, DownloadProgressModel e)
     {
         if (_progressTasks.TryGetValue(e.Filename, out var task))
         {

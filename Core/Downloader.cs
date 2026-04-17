@@ -1,11 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Threading;
-using System.Threading.Tasks;
 using MediaDebrid_cli.Models;
 
 namespace MediaDebrid_cli.Core;
@@ -14,7 +7,7 @@ public class Downloader
 {
     private readonly HttpClient _httpClient;
 
-    public event EventHandler<DownloadProgressEventArgs>? ProgressChanged;
+    public event EventHandler<DownloadProgressModel>? ProgressChanged;
 
     public Downloader()
     {
@@ -81,7 +74,7 @@ public class Downloader
                 var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
                 double speed = elapsed > 0 ? bytesDownloaded / elapsed : 0;
 
-                ProgressChanged?.Invoke(this, new DownloadProgressEventArgs
+                ProgressChanged?.Invoke(this, new DownloadProgressModel
                 {
                     Filename = Path.GetFileName(destPath),
                     BytesDownloaded = bytesDownloaded,
@@ -129,7 +122,7 @@ public class Downloader
                 var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
                 double speed = elapsed > 0 ? bytesDownloaded / elapsed : 0;
 
-                ProgressChanged?.Invoke(this, new DownloadProgressEventArgs
+                ProgressChanged?.Invoke(this, new DownloadProgressModel
                 {
                     Filename = Path.GetFileName(destPath),
                     BytesDownloaded = bytesDownloaded,
@@ -140,6 +133,11 @@ public class Downloader
 
             fileStream.Close();
             FinalizeDownload(tempPath, destPath);
+        }
+        catch (OperationCanceledException)
+        {
+            if (File.Exists(tempPath)) File.Delete(tempPath);
+            throw;
         }
         catch
         {

@@ -1,7 +1,4 @@
-using System;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using MediaDebrid_cli.Models;
 using TMDbLib.Client;
 
@@ -19,7 +16,7 @@ public class MetadataResolver
         }
     }
 
-    public async Task<ResolvedMetadata> ResolveAsync(string name, string? mediaTypeHint = null, CancellationToken cancellationToken = default)
+    public async Task<TMDBModels> ResolveAsync(string name, string? mediaTypeHint = null, CancellationToken cancellationToken = default)
     {
         var parsed = ParseName(name);
 
@@ -73,9 +70,9 @@ public class MetadataResolver
         return parsed;
     }
 
-    private ResolvedMetadata ParseName(string name)
+    private TMDBModels ParseName(string name)
     {
-        var result = new ResolvedMetadata();
+        var result = new TMDBModels();
 
         var seMatch = Regex.Match(name, @"S(?<season>\d{1,2})E(?<episode>\d{1,2})", RegexOptions.IgnoreCase);
         if (seMatch.Success)
