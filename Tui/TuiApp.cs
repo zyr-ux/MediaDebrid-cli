@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediaDebrid_cli.Services;
+using Spectre.Console.Rendering;
 
 
 namespace MediaDebrid_cli.Tui;
@@ -87,7 +88,7 @@ public class TuiApp
                         ctx.Status("[yellow]Resolving metadata from magnet...[/]");
                         resolved = await _metadataResolver.ResolveAsync(magnetName, typeOverride, cancellationToken: cancellationToken);
                         ApplyOverrides(resolved);
-                        RenderMetadataPanel(resolved, $"Source (Magnet): {magnetName}");
+                        RenderMetadataPanel(resolved, magnetName);
                     }
 
                     // 2. Submit or reuse existing torrent on Real-Debrid
@@ -122,12 +123,9 @@ public class TuiApp
                         ctx.Status("[yellow]Resolving metadata from Real-Debrid filename...[/]");
                         resolved = await _metadataResolver.ResolveAsync(info.Filename, typeOverride, cancellationToken: cancellationToken);
                         ApplyOverrides(resolved);
-                        RenderMetadataPanel(resolved, $"Source (RD): {info.Filename}");
+                        RenderMetadataPanel(resolved, info.Filename);
                     }
-                    else
-                    {
-                        AnsiConsole.MarkupLine($"[dim]Source (RD): {info.Filename}[/]");
-                    }
+
 
                     // 4. Wait for Real-Debrid to be ready for file selection
                     ctx.Status("[yellow]Waiting for Real-Debrid status...[/]");
@@ -194,7 +192,7 @@ public class TuiApp
                     new PercentageColumn(),
                     new DownloadedColumn(),
                     new TransferSpeedColumn(),
-                    new RemainingTimeColumn())
+                    new EtaTimeColumn())
                 .StartAsync(async ctx =>
                 {
                     var tasks = info.Links.Select(async link =>
@@ -205,14 +203,15 @@ public class TuiApp
                             var unrestricted = await GetClient().UnrestrictLinkAsync(link, cancellationToken: cancellationToken);
                             string filename = unrestricted.Filename;
                             string destPath = PathGenerator.GetDestinationPath(resolved.Type, resolved.Title, resolved.Year, filename, resolved.Season);
+                            string progressKey = destPath;
                             string tempPath = destPath + ".mdebrid";
                             activePaths.Add(tempPath);
 
                             progressTask = ctx.AddTask($"[cyan]{filename}[/]", new ProgressTaskSettings { AutoStart = false, MaxValue = 100 });
-                            _progressTasks[filename] = progressTask;
+                            _progressTasks[progressKey] = progressTask;
                             progressTask.StartTask();
 
-                            await _downloader.DownloadFileAsync(unrestricted.Download, destPath, cancellationToken);
+                            await _downloader.DownloadFileAsync(unrestricted.Download, destPath, progressKey, cancellationToken);
 
                             progressTask.Value = progressTask.MaxValue;
                             progressTask.StopTask();
@@ -280,7 +279,7 @@ public class TuiApp
             {
                 magnet = await CancellablePromptAsync(
                     new TextPrompt<string>("Enter [green]Magnet Link[/]:")
-                        .PromptStyle("white")
+                        .PromptStyle("green")
                         .Validate(k =>
                         {
                             if (string.IsNullOrWhiteSpace(k)) return ValidationResult.Error("[red]Magnet link cannot be empty.[/]");
@@ -447,10 +446,31 @@ public class TuiApp
 
     private void OnDownloadProgressChanged(object? sender, DownloadProgressModel e)
     {
-        if (_progressTasks.TryGetValue(e.Filename, out var task))
+        if (_progressTasks.TryGetValue(e.ProgressKey, out var task))
         {
             task.MaxValue = e.TotalBytes;
             task.Value = e.BytesDownloaded;
+        }
+    }
+
+    private sealed class EtaTimeColumn : ProgressColumn
+    {
+        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
+        {
+            var remaining = task.RemainingTime;
+            if (remaining == null)
+            {
+                return new Text("--");
+            }
+
+            var eta = remaining.Value;
+            if (eta.TotalHours >= 1)
+            {
+                var hours = (int)eta.TotalHours;
+                return new Text($"{hours}h:{eta.Minutes:D2}m");
+            }
+
+            return new Text($"{(int)eta.TotalMinutes}m:{eta.Seconds:D2}s");
         }
     }
 }

@@ -105,7 +105,6 @@ public class Downloader
 
     public event EventHandler<DownloadProgressModel>? ProgressChanged;
 
-    private long _lastUpdateTicks = 0;
     private static readonly long UpdateIntervalTicks = TimeSpan.FromMilliseconds(100).Ticks;
 
     public Downloader()
@@ -113,24 +112,25 @@ public class Downloader
         _httpClient = new HttpClient();
     }
 
-    public async Task DownloadFileAsync(string url, string destPath, CancellationToken cancellationToken = default)
+    public async Task DownloadFileAsync(string url, string destPath, string? progressKey = null, CancellationToken cancellationToken = default)
     {
         bool segmented = Settings.ParallelDownloadEnabled;
         int segments = Settings.ConnectionsPerFile;
+        string resolvedProgressKey = string.IsNullOrWhiteSpace(progressKey) ? destPath : progressKey;
 
         Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
 
         if (segmented)
         {
-            await DownloadSegmentedAsync(url, destPath, segments, cancellationToken);
+            await DownloadSegmentedAsync(url, destPath, segments, resolvedProgressKey, cancellationToken);
         }
         else
         {
-            await DownloadSingleAsync(url, destPath, cancellationToken: cancellationToken);
+            await DownloadSingleAsync(url, destPath, resolvedProgressKey, cancellationToken: cancellationToken);
         }
     }
 
-    private async Task DownloadSegmentedAsync(string url, string destPath, int segments, CancellationToken cancellationToken = default)
+    private async Task DownloadSegmentedAsync(string url, string destPath, int segments, string progressKey, CancellationToken cancellationToken = default)
     {
         var headReq = new HttpRequestMessage(HttpMethod.Head, url);
         var headRes = await _httpClient.SendAsync(headReq, cancellationToken);
@@ -141,7 +141,7 @@ public class Downloader
 
         if (totalSize == 0 || !acceptRanges || segments <= 1)
         {
-            await DownloadSingleAsync(url, destPath, totalSize, cancellationToken);
+            await DownloadSingleAsync(url, destPath, progressKey, totalSize, cancellationToken);
             return;
         }
 
@@ -149,6 +149,7 @@ public class Downloader
         var ranges = PlanByteRanges(totalSize, segments);
 
         long bytesDownloaded = 0;
+        long lastUpdateTicks = 0;
         DateTime startTime = DateTime.UtcNow;
 
         var tasks = ranges.Select(async range =>
@@ -171,14 +172,15 @@ public class Downloader
                 var currentDownloaded = Interlocked.Add(ref bytesDownloaded, read);
 
                 long currentTicks = DateTime.UtcNow.Ticks;
-                if (currentTicks - Interlocked.Read(ref _lastUpdateTicks) > UpdateIntervalTicks || currentDownloaded == totalSize)
+                if (currentTicks - Interlocked.Read(ref lastUpdateTicks) > UpdateIntervalTicks || currentDownloaded == totalSize)
                 {
-                    Interlocked.Exchange(ref _lastUpdateTicks, currentTicks);
+                    Interlocked.Exchange(ref lastUpdateTicks, currentTicks);
                     var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
                     double speed = elapsed > 0 ? currentDownloaded / elapsed : 0;
 
                     ProgressChanged?.Invoke(this, new DownloadProgressModel
                     {
+                        ProgressKey = progressKey,
                         Filename = Path.GetFileName(destPath),
                         BytesDownloaded = currentDownloaded,
                         TotalBytes = totalSize,
@@ -200,7 +202,7 @@ public class Downloader
         }
     }
 
-    private async Task DownloadSingleAsync(string url, string destPath, long totalSize = 0, CancellationToken cancellationToken = default)
+    private async Task DownloadSingleAsync(string url, string destPath, string progressKey, long totalSize = 0, CancellationToken cancellationToken = default)
     {
         var res = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         res.EnsureSuccessStatusCode();
@@ -209,6 +211,7 @@ public class Downloader
         string tempPath = CreateTempFile(destPath, totalSize);
 
         long bytesDownloaded = 0;
+        long lastUpdateTicks = 0;
         DateTime startTime = DateTime.UtcNow;
 
         try
@@ -224,14 +227,15 @@ public class Downloader
                 bytesDownloaded += read;
 
                 long currentTicks = DateTime.UtcNow.Ticks;
-                if (currentTicks - Interlocked.Read(ref _lastUpdateTicks) > UpdateIntervalTicks || bytesDownloaded == totalSize)
+                if (currentTicks - lastUpdateTicks > UpdateIntervalTicks || bytesDownloaded == totalSize)
                 {
-                    Interlocked.Exchange(ref _lastUpdateTicks, currentTicks);
+                    lastUpdateTicks = currentTicks;
                     var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
                     double speed = elapsed > 0 ? bytesDownloaded / elapsed : 0;
 
                     ProgressChanged?.Invoke(this, new DownloadProgressModel
                     {
+                        ProgressKey = progressKey,
                         Filename = Path.GetFileName(destPath),
                         BytesDownloaded = bytesDownloaded,
                         TotalBytes = totalSize,
