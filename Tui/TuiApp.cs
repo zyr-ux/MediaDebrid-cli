@@ -54,6 +54,7 @@ public class TuiApp
         var torrentId = string.Empty;
         TorrentInfo? info = null;
         TMDBModels? resolved = null;
+        HashSet<int>? existingEpisodes = null;
 
         if (MagnetParser.ExtractHash(magnet) == null)
         {
@@ -127,7 +128,6 @@ public class TuiApp
                         return;
                     }
 
-                    HashSet<int>? existingEpisodes = null;
                     if (resolved.Type == "show" && Settings.Instance.SkipExistingEpisodes)
                     {
                         var seasonDir = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, resolved.Season);
