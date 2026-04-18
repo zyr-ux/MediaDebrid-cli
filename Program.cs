@@ -1,6 +1,7 @@
 using System.CommandLine;
 using MediaDebrid_cli.Services;
 using MediaDebrid_cli.Tui;
+using MediaDebrid_cli.Models;
 using Spectre.Console;
 
 namespace MediaDebrid_cli;
@@ -46,18 +47,7 @@ internal static class Program
 
         addCommand.SetHandler(async (magnet, type, title, year, season) =>
         {
-            try
-            {
-                await app.RunAsync(magnet, type, title, year, season, showLogo: true, cts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                // Message already printed in CancelKeyPress or RunAsync
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.WriteException(ex);
-            }
+            await app.RunAsync(magnet, type, title, year, season, showLogo: true, cts.Token);
         }, magnetArg, typeOption, titleOption, yearOption, seasonOption);
 
         rootCommand.AddCommand(addCommand);
@@ -86,19 +76,27 @@ internal static class Program
         rootCommand.AddCommand(listCommand);
 
         // ── Interactive mode (no args) ─────────────────────────────────────
-        if (args.Length == 0)
+        // ── Execute ────────────────────────────────────────────────────────
+        try
         {
-            try
+            if (args.Length == 0)
             {
                 await app.RunInteractiveAsync(cts.Token);
+                return 0;
             }
-            catch (OperationCanceledException)
-            {
-                // Already handled by the immediate message in CancelKeyPress or inner handlers
-            }
+
+            return await rootCommand.InvokeAsync(args);
+        }
+        catch (OperationCanceledException ex)
+        {
+            var tex = ex as TerminationException ?? new TerminationException();
+            tex.Print();
             return 0;
         }
-
-        return await rootCommand.InvokeAsync(args);
+        catch (Exception ex)
+        {
+            AnsiConsole.WriteException(ex);
+            return 1;
+        }
     }
 }
