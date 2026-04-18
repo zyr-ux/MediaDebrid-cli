@@ -8,18 +8,16 @@ namespace MediaDebrid_cli;
 
 internal static class Program
 {
-    static async Task<int> Main(string[] args)
+    private static async Task<int> Main(string[] args)
     {
         Settings.Load();
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
         {
-            if (!cts.IsCancellationRequested)
-            {
-                e.Cancel = true;
-                cts.Cancel();
-            }
+            if (cts.IsCancellationRequested) return;
+            e.Cancel = true;
+            cts.Cancel();
         };
 
         Downloader.CleanupStaleFiles(Settings.Instance.MediaRoot);
@@ -59,19 +57,13 @@ internal static class Program
         setCommand.AddArgument(keyArg);
         setCommand.AddArgument(valueArg);
 
-        setCommand.SetHandler((key, value) =>
-        {
-            app.SetConfigurationValue(key, value);
-        }, keyArg, valueArg);
+        setCommand.SetHandler(app.SetConfigurationValue, keyArg, valueArg);
 
         rootCommand.AddCommand(setCommand);
 
         // ── list Command ───────────────────────────────────────────────────
         var listCommand = new Command("list", "List all current configurations");
-        listCommand.SetHandler(() =>
-        {
-            app.ListConfiguration();
-        });
+        listCommand.SetHandler(app.ListConfiguration);
 
         rootCommand.AddCommand(listCommand);
 
@@ -79,13 +71,10 @@ internal static class Program
         // ── Execute ────────────────────────────────────────────────────────
         try
         {
-            if (args.Length == 0)
-            {
-                await app.RunInteractiveAsync(cts.Token);
-                return 0;
-            }
+            if (args.Length != 0) return await rootCommand.InvokeAsync(args);
+            await app.RunInteractiveAsync(cts.Token);
+            return 0;
 
-            return await rootCommand.InvokeAsync(args);
         }
         catch (OperationCanceledException ex)
         {
