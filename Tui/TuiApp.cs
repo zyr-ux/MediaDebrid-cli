@@ -247,10 +247,12 @@ public class TuiApp
         }
         catch (OperationCanceledException)
         {
+            var ex = new TerminationException("[red]Termination requested. Cleaning up...[/]");
+            ex.Print();
             // Wait for background tasks to finish their cancellation and release file handles
             try { await Task.WhenAll(allDownloadTasks); } catch { /* Ignore cancellation errors */ }
             Downloader.CleanupFiles(activePaths);
-            throw new TerminationException("[red]Termination requested. Cleaning up...[/]");
+            throw ex;
         }
         catch (Exception ex)
         {
@@ -291,7 +293,9 @@ public class TuiApp
             }
             catch (OperationCanceledException)
             {
-                throw new TerminationException("\n[red]Application terminated. Exiting...[/]");
+                var ex = new TerminationException("\n[red]Application terminated. Exiting...[/]");
+                ex.Print();
+                throw ex;
             }
 
             if (magnet is null || cancellationToken.IsCancellationRequested) break;
@@ -347,7 +351,9 @@ public class TuiApp
         }
         catch (OperationCanceledException)
         {
-            throw new TerminationException("\n[red]Setup cancelled. Exiting...[/]");
+            var ex = new TerminationException("\n[red]Setup cancelled. Exiting...[/]");
+            ex.Print();
+            throw ex;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
