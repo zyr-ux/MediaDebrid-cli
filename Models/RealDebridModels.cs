@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace MediaDebrid_cli.Models;
 
@@ -66,5 +66,14 @@ public class UnrestrictResponse
 
     [JsonPropertyName("download")]
     public string Download { get; set; } = string.Empty;
+}
+
+public class RealDebridErrorResponse
+{
+    [JsonPropertyName("error")]
+    public string Error { get; set; } = string.Empty;
+
+    [JsonPropertyName("error_code")]
+    public int ErrorCode { get; set; }
 }
 

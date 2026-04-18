@@ -1,4 +1,6 @@
 using System.Net.Http.Headers;
+using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using MediaDebrid_cli.Models;
 
 namespace MediaDebrid_cli.Core;
@@ -6,8 +8,44 @@ namespace MediaDebrid_cli.Core;
 public class Downloader
 {
     private readonly HttpClient _httpClient;
+    private static readonly ConcurrentDictionary<string, byte> _activeTempFiles = new();
+
+    static Downloader()
+    {
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => CleanupStatic();
+    }
+
+    public static void CleanupStatic()
+    {
+        foreach (var file in _activeTempFiles.Keys)
+        {
+            try
+            {
+                if (File.Exists(file)) File.Delete(file);
+            }
+            catch { /* Ignore */ }
+        }
+    }
+
+    public static void CleanupStaleFiles(string rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath)) return;
+
+        try
+        {
+            var files = Directory.GetFiles(rootPath, "*.mdebrid", SearchOption.AllDirectories);
+            foreach (var file in files)
+            {
+                try { File.Delete(file); } catch { }
+            }
+        }
+        catch { /* Ignore errors accessing directories */ }
+    }
 
     public event EventHandler<DownloadProgressModel>? ProgressChanged;
+
+    private long _lastUpdateTicks = 0;
+    private static readonly long UpdateIntervalTicks = TimeSpan.FromMilliseconds(100).Ticks;
 
     public Downloader()
     {
@@ -69,18 +107,23 @@ public class Downloader
             while ((read = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
             {
                 await fileStream.WriteAsync(buffer, 0, read, cancellationToken);
-                Interlocked.Add(ref bytesDownloaded, read);
+                var currentDownloaded = Interlocked.Add(ref bytesDownloaded, read);
 
-                var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
-                double speed = elapsed > 0 ? bytesDownloaded / elapsed : 0;
-
-                ProgressChanged?.Invoke(this, new DownloadProgressModel
+                long currentTicks = DateTime.UtcNow.Ticks;
+                if (currentTicks - Interlocked.Read(ref _lastUpdateTicks) > UpdateIntervalTicks || currentDownloaded == totalSize)
                 {
-                    Filename = Path.GetFileName(destPath),
-                    BytesDownloaded = bytesDownloaded,
-                    TotalBytes = totalSize,
-                    SpeedBytesPerSecond = speed
-                });
+                    Interlocked.Exchange(ref _lastUpdateTicks, currentTicks);
+                    var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
+                    double speed = elapsed > 0 ? currentDownloaded / elapsed : 0;
+
+                    ProgressChanged?.Invoke(this, new DownloadProgressModel
+                    {
+                        Filename = Path.GetFileName(destPath),
+                        BytesDownloaded = currentDownloaded,
+                        TotalBytes = totalSize,
+                        SpeedBytesPerSecond = speed
+                    });
+                }
             }
         });
 
@@ -91,6 +134,7 @@ public class Downloader
         }
         catch
         {
+            _activeTempFiles.TryRemove(tempPath, out _);
             if (File.Exists(tempPath)) File.Delete(tempPath);
             throw;
         }
@@ -119,16 +163,21 @@ public class Downloader
                 await fileStream.WriteAsync(buffer, 0, read, cancellationToken);
                 bytesDownloaded += read;
 
-                var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
-                double speed = elapsed > 0 ? bytesDownloaded / elapsed : 0;
-
-                ProgressChanged?.Invoke(this, new DownloadProgressModel
+                long currentTicks = DateTime.UtcNow.Ticks;
+                if (currentTicks - Interlocked.Read(ref _lastUpdateTicks) > UpdateIntervalTicks || bytesDownloaded == totalSize)
                 {
-                    Filename = Path.GetFileName(destPath),
-                    BytesDownloaded = bytesDownloaded,
-                    TotalBytes = totalSize,
-                    SpeedBytesPerSecond = speed
-                });
+                    Interlocked.Exchange(ref _lastUpdateTicks, currentTicks);
+                    var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
+                    double speed = elapsed > 0 ? bytesDownloaded / elapsed : 0;
+
+                    ProgressChanged?.Invoke(this, new DownloadProgressModel
+                    {
+                        Filename = Path.GetFileName(destPath),
+                        BytesDownloaded = bytesDownloaded,
+                        TotalBytes = totalSize,
+                        SpeedBytesPerSecond = speed
+                    });
+                }
             }
 
             fileStream.Close();
@@ -136,11 +185,13 @@ public class Downloader
         }
         catch (OperationCanceledException)
         {
+            _activeTempFiles.TryRemove(tempPath, out _);
             if (File.Exists(tempPath)) File.Delete(tempPath);
             throw;
         }
         catch
         {
+            _activeTempFiles.TryRemove(tempPath, out _);
             if (File.Exists(tempPath)) File.Delete(tempPath);
             throw;
         }
@@ -148,9 +199,8 @@ public class Downloader
 
     private string CreateTempFile(string destPath, long totalSize)
     {
-        string tempDir = Path.Combine(Path.GetDirectoryName(destPath)!, ".mediadebrid-temp");
-        Directory.CreateDirectory(tempDir);
-        string tempPath = Path.Combine(tempDir, "part-" + Guid.NewGuid() + ".tmp");
+        string tempPath = destPath + ".mdebrid";
+        _activeTempFiles.TryAdd(tempPath, 0);
 
         using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
@@ -159,11 +209,24 @@ public class Downloader
                 fs.SetLength(totalSize);
             }
         }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            try { File.SetAttributes(tempPath, FileAttributes.Hidden); } catch { }
+        }
+
         return tempPath;
     }
 
     private void FinalizeDownload(string tempPath, string destPath)
     {
+        _activeTempFiles.TryRemove(tempPath, out _);
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            try { File.SetAttributes(tempPath, FileAttributes.Normal); } catch { }
+        }
+
         if (File.Exists(destPath)) File.Delete(destPath);
         File.Move(tempPath, destPath);
     }

@@ -31,7 +31,7 @@ public class TuiApp
                 .Color(Color.Green));
     }
 
-    public async Task RunAsync(string magnet, bool showLogo = true, CancellationToken cancellationToken = default)
+    public async Task RunAsync(string magnet, string? typeOverride = null, string? titleOverride = null, string? yearOverride = null, int? seasonOverride = null, bool showLogo = true, CancellationToken cancellationToken = default)
     {
         if (showLogo)
         {
@@ -42,11 +42,26 @@ public class TuiApp
         TorrentInfo? info = null;
         TMDBModels? resolved = null;
 
+        if (MagnetParser.ExtractHash(magnet) == null)
+        {
+            AnsiConsole.MarkupLine("[red]Error:[/] [white]Invalid magnet link: Missing BTIH hash (xt=urn:btih:).[/]");
+            return;
+        }
+
         await AnsiConsole.Status()
             .StartAsync("Initializing...", async ctx =>
             {
                 ctx.Spinner(Spinner.Known.Dots);
                 ctx.SpinnerStyle(Style.Parse("green"));
+
+                void ApplyOverrides(TMDBModels meta)
+                {
+                    if (!string.IsNullOrWhiteSpace(titleOverride)) meta.Title = titleOverride.Trim();
+                    if (!string.IsNullOrWhiteSpace(typeOverride)) meta.Type = typeOverride.Trim().ToLowerInvariant();
+                    if (!string.IsNullOrWhiteSpace(yearOverride)) meta.Year = yearOverride.Trim();
+                    if (seasonOverride.HasValue) meta.Season = seasonOverride;
+                    if (meta.Season == null && meta.Type == "show") meta.Season = 1;
+                }
 
                 try
                 {
@@ -55,7 +70,8 @@ public class TuiApp
                     if (!string.IsNullOrEmpty(magnetName))
                     {
                         ctx.Status("[yellow]Resolving metadata from magnet...[/]");
-                        resolved = await _metadataResolver.ResolveAsync(magnetName, cancellationToken: cancellationToken);
+                        resolved = await _metadataResolver.ResolveAsync(magnetName, typeOverride, cancellationToken: cancellationToken);
+                        ApplyOverrides(resolved);
                         RenderMetadataPanel(resolved, $"Source (Magnet): {magnetName}");
                     }
 
@@ -89,7 +105,8 @@ public class TuiApp
                     if (resolved == null)
                     {
                         ctx.Status("[yellow]Resolving metadata from Real-Debrid filename...[/]");
-                        resolved = await _metadataResolver.ResolveAsync(info.Filename, cancellationToken: cancellationToken);
+                        resolved = await _metadataResolver.ResolveAsync(info.Filename, typeOverride, cancellationToken: cancellationToken);
+                        ApplyOverrides(resolved);
                         RenderMetadataPanel(resolved, $"Source (RD): {info.Filename}");
                     }
                     else
@@ -99,7 +116,7 @@ public class TuiApp
 
                     // 4. Wait for Real-Debrid to be ready for file selection
                     ctx.Status("[yellow]Waiting for Real-Debrid status...[/]");
-                    while (true)
+                    while (!cancellationToken.IsCancellationRequested)
                     {
                         info = await _client.GetTorrentInfoAsync(torrentId, cancellationToken: cancellationToken);
                         if (info.Status is "waiting_files_selection" or "downloaded" or "dead") break;
@@ -126,7 +143,7 @@ public class TuiApp
                         AnsiConsole.MarkupLine("[green]✓[/] Selected relevant files.");
 
                         ctx.Status("[yellow]Waiting for Real-Debrid to cache files...[/]");
-                        while (true)
+                        while (!cancellationToken.IsCancellationRequested)
                         {
                             info = await _client.GetTorrentInfoAsync(torrentId, cancellationToken: cancellationToken);
                             if (info.Status == "downloaded") break;
@@ -136,10 +153,13 @@ public class TuiApp
 
                     AnsiConsole.MarkupLine("[green]✓[/] Files are ready and cached!");
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Error:[/] {ex.Message}");
-                    throw;
+                    AnsiConsole.MarkupLine($"[red]Error during initialization:[/] [white]{ex.Message}[/]");
                 }
             });
 
@@ -147,51 +167,71 @@ public class TuiApp
 
         AnsiConsole.MarkupLine("\n[bold]Starting Downloads...[/]");
 
-        await AnsiConsole.Progress()
-            .AutoClear(false)
-            .Columns(
-                new TaskDescriptionColumn(),
-                new ProgressBarColumn(),
-                new PercentageColumn(),
-                new DownloadedColumn(),
-                new TransferSpeedColumn(),
-                new RemainingTimeColumn())
-            .StartAsync(async ctx =>
-            {
-                var downloadTasks = info.Links.Select(async link =>
+        try
+        {
+            await AnsiConsole.Progress()
+                .AutoClear(false)
+                .Columns(
+                    new TaskDescriptionColumn(),
+                    new ProgressBarColumn(),
+                    new PercentageColumn(),
+                    new DownloadedColumn(),
+                    new TransferSpeedColumn(),
+                    new RemainingTimeColumn())
+                .StartAsync(async ctx =>
                 {
+                    var downloadTasks = info.Links.Select(async link =>
+                    {
+                        ProgressTask? progressTask = null;
+                        try
+                        {
+                            var unrestricted = await _client.UnrestrictLinkAsync(link, cancellationToken: cancellationToken);
+                            string filename = unrestricted.Filename;
+                            string destPath = PathGenerator.GetDestinationPath(resolved.Type, resolved.Title, resolved.Year, filename, resolved.Season);
+
+                            progressTask = ctx.AddTask($"[cyan]{filename}[/]", new ProgressTaskSettings { AutoStart = false, MaxValue = 100 });
+                            _progressTasks[filename] = progressTask;
+                            progressTask.StartTask();
+
+                            await _downloader.DownloadFileAsync(unrestricted.Download, destPath, cancellationToken);
+
+                            progressTask.Value = progressTask.MaxValue;
+                            progressTask.StopTask();
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            progressTask?.StopTask();
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            progressTask?.StopTask();
+                            AnsiConsole.MarkupLine($"[red]Download failed:[/] {ex.Message}");
+                        }
+                    });
+
                     try
                     {
-                        var unrestricted = await _client.UnrestrictLinkAsync(link, cancellationToken: cancellationToken);
-                        string filename = unrestricted.Filename;
-                        string destPath = PathGenerator.GetDestinationPath(resolved.Type, resolved.Title, resolved.Year, filename, resolved.Season);
-
-                        var progressTask = ctx.AddTask($"[cyan]{filename}[/]", new ProgressTaskSettings { AutoStart = false, MaxValue = 100 });
-                        _progressTasks[filename] = progressTask;
-                        progressTask.StartTask();
-
-                        await _downloader.DownloadFileAsync(unrestricted.Download, destPath, cancellationToken);
-
-                        progressTask.Value = progressTask.MaxValue;
-                        progressTask.StopTask();
+                        await Task.WhenAll(downloadTasks);
                     }
                     catch (OperationCanceledException)
                     {
-                        // Propagate cancellation upwards
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        AnsiConsole.MarkupLine($"[red]Download failed:[/] {ex.Message}");
+                        // Expected on cancellation, allow the progress block to finish gracefully
                     }
                 });
 
-                await Task.WhenAll(downloadTasks);
-            });
-
-        if (!cancellationToken.IsCancellationRequested)
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                AnsiConsole.MarkupLine("\n[bold green]All downloads completed![/]");
+            }
+        }
+        catch (OperationCanceledException)
         {
-            AnsiConsole.MarkupLine("\n[bold green]All downloads completed![/]");
+            AnsiConsole.MarkupLine("\n[yellow]! Download process cancelled by user.[/]");
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"\n[red]Critical error during download process:[/] {ex.Message}");
         }
     }
 
