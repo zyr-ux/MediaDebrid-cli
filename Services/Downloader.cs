@@ -36,10 +36,48 @@ public class Downloader
             var files = Directory.GetFiles(rootPath, "*.mdebrid", SearchOption.AllDirectories);
             foreach (var file in files)
             {
-                try { File.Delete(file); } catch { }
+                try
+                {
+                    string? dir = Path.GetDirectoryName(file);
+                    File.Delete(file);
+                    if (dir != null) DeleteEmptyDirectories(dir, rootPath);
+                }
+                catch { }
             }
         }
         catch { /* Ignore errors accessing directories */ }
+    }
+
+    private static void DeleteEmptyDirectories(string? directoryPath, string rootPath)
+    {
+        if (string.IsNullOrEmpty(directoryPath)) return;
+
+        try
+        {
+            var currentDir = new DirectoryInfo(directoryPath);
+            var rootDir = new DirectoryInfo(Path.GetFullPath(rootPath));
+
+            while (currentDir.Exists &&
+                   currentDir.FullName.Length > rootDir.FullName.Length &&
+                   currentDir.FullName.StartsWith(rootDir.FullName, StringComparison.OrdinalIgnoreCase))
+            {
+                // Check if directory is empty
+                if (currentDir.GetFileSystemInfos().Length == 0)
+                {
+                    currentDir.Delete();
+                    currentDir = currentDir.Parent;
+                    if (currentDir == null) break;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+        catch
+        {
+            // Ignore errors during directory cleanup
+        }
     }
 
     public event EventHandler<DownloadProgressModel>? ProgressChanged;
@@ -136,6 +174,7 @@ public class Downloader
         {
             _activeTempFiles.TryRemove(tempPath, out _);
             if (File.Exists(tempPath)) File.Delete(tempPath);
+            DeleteEmptyDirectories(Path.GetDirectoryName(destPath), Settings.MediaRoot);
             throw;
         }
     }
@@ -187,12 +226,14 @@ public class Downloader
         {
             _activeTempFiles.TryRemove(tempPath, out _);
             if (File.Exists(tempPath)) File.Delete(tempPath);
+            DeleteEmptyDirectories(Path.GetDirectoryName(destPath), Settings.MediaRoot);
             throw;
         }
         catch
         {
             _activeTempFiles.TryRemove(tempPath, out _);
             if (File.Exists(tempPath)) File.Delete(tempPath);
+            DeleteEmptyDirectories(Path.GetDirectoryName(destPath), Settings.MediaRoot);
             throw;
         }
     }
