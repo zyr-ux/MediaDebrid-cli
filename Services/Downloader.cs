@@ -130,43 +130,52 @@ public class Downloader
         long lastUpdateTicks = 0;
         DateTime startTime = DateTime.UtcNow;
 
+        using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var tasks = ranges.Select(async range =>
         {
-            var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Range = new RangeHeaderValue(range.Item1, range.Item2);
-
-            var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            res.EnsureSuccessStatusCode();
-
-            using var stream = await res.Content.ReadAsStreamAsync(cancellationToken);
-            using var fileStream = new FileStream(tempPath, FileMode.Open, FileAccess.Write, FileShare.Write, 8192, useAsync: true);
-            fileStream.Position = range.Item1;
-
-            byte[] buffer = new byte[65536];
-            int read;
-            while ((read = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+            try
             {
-                await fileStream.WriteAsync(buffer, 0, read, cancellationToken);
-                var currentDownloaded = Interlocked.Add(ref bytesDownloaded, read);
+                var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.Range = new RangeHeaderValue(range.Item1, range.Item2);
 
-                long currentTicks = DateTime.UtcNow.Ticks;
-                if (currentTicks - Interlocked.Read(ref lastUpdateTicks) > UpdateIntervalTicks || currentDownloaded == totalSize)
+                var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, internalCts.Token);
+                res.EnsureSuccessStatusCode();
+
+                using var stream = await res.Content.ReadAsStreamAsync(internalCts.Token);
+                using var fileStream = new FileStream(tempPath, FileMode.Open, FileAccess.Write, FileShare.Write, 8192, useAsync: true);
+                fileStream.Position = range.Item1;
+
+                byte[] buffer = new byte[65536];
+                int read;
+                while ((read = await stream.ReadAsync(buffer, 0, buffer.Length, internalCts.Token)) > 0)
                 {
-                    Interlocked.Exchange(ref lastUpdateTicks, currentTicks);
-                    var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
-                    double speed = elapsed > 0 ? currentDownloaded / elapsed : 0;
+                    await fileStream.WriteAsync(buffer, 0, read, internalCts.Token);
+                    var currentDownloaded = Interlocked.Add(ref bytesDownloaded, read);
 
-                    ProgressChanged?.Invoke(this, new DownloadProgressModel
+                    long currentTicks = DateTime.UtcNow.Ticks;
+                    if (currentTicks - Interlocked.Read(ref lastUpdateTicks) > UpdateIntervalTicks || currentDownloaded == totalSize)
                     {
-                        ProgressKey = progressKey,
-                        Filename = Path.GetFileName(destPath),
-                        BytesDownloaded = currentDownloaded,
-                        TotalBytes = totalSize,
-                        SpeedBytesPerSecond = speed
-                    });
+                        Interlocked.Exchange(ref lastUpdateTicks, currentTicks);
+                        var elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
+                        double speed = elapsed > 0 ? currentDownloaded / elapsed : 0;
+
+                        ProgressChanged?.Invoke(this, new DownloadProgressModel
+                        {
+                            ProgressKey = progressKey,
+                            Filename = Path.GetFileName(destPath),
+                            BytesDownloaded = currentDownloaded,
+                            TotalBytes = totalSize,
+                            SpeedBytesPerSecond = speed
+                        });
+                    }
                 }
             }
-        });
+            catch
+            {
+                internalCts.Cancel();
+                throw;
+            }
+        }).ToList();
 
         try
         {
@@ -175,6 +184,8 @@ public class Downloader
         }
         catch
         {
+            internalCts.Cancel();
+            try { await Task.WhenAll(tasks); } catch { } 
             CleanupFiles(new[] { tempPath });
             throw;
         }

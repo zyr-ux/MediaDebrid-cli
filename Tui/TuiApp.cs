@@ -324,7 +324,6 @@ public class TuiApp
             if (magnet is null || cancellationToken.IsCancellationRequested) break;
 
             await RunAsync(magnet, showLogo: false, cancellationToken: cancellationToken);
-            break; 
         }
     }
 

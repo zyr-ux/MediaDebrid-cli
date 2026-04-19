@@ -56,6 +56,9 @@ public static class Settings
         if (int.TryParse(Environment.GetEnvironmentVariable("TMDB_CACHE_TTL_SECONDS"), out int ttl))
             Instance.TmdbCacheTtlSeconds = ttl;
 
+        if (bool.TryParse(Environment.GetEnvironmentVariable("SKIP_EXISTING_EPISODES"), out bool skip))
+            Instance.SkipExistingEpisodes = skip;
+
         // Save immediately if we loaded from legacy methods so next time it uses json
         Save();
     }

@@ -37,8 +37,13 @@ public static class PathGenerator
     private static string Sanitize(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return string.Empty;
-        string invalidChars = new string(Path.GetInvalidFileNameChars()) + new string(Path.GetInvalidPathChars());
+        
+        // Remove invalid characters but allow directory separators for subpaths
+        string invalidChars = new string(Path.GetInvalidFileNameChars())
+            .Replace("/", "").Replace("\\", ""); 
+        invalidChars += new string(Path.GetInvalidPathChars());
+
         var regex = new Regex($"[{Regex.Escape(invalidChars)}]");
-        return regex.Replace(input, "");
+        return regex.Replace(input, "").Trim();
     }
 }
