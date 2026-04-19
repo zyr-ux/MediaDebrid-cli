@@ -117,27 +117,27 @@ public static class Utils
         sb.AppendLine("  mediadebrid-cli <command> [options]");
         sb.AppendLine();
         sb.AppendLine("COMMANDS");
-        sb.AppendLine($"  {"add <magnet>",-24} - Add a magnet and start downloading");
-        sb.AppendLine($"  {"set <key> <value>",-24} - Set a configuration value");
-        sb.AppendLine($"  {"list",-24} - Show current configuration");
+        sb.AppendLine($"  {"add <magnet>",-30} - Add a magnet and start downloading");
+        sb.AppendLine($"  {"set <key> <value>",-30} - Set a configuration value");
+        sb.AppendLine($"  {"list",-30} - Show current configuration");
         sb.AppendLine();
         sb.AppendLine("OPTIONS");
-        sb.AppendLine($"  {"-v, --version",-24} - Show version");
-        sb.AppendLine($"  {"-h, --help",-24} - Show help");
+        sb.AppendLine($"  {"-v, --version",-30} - Show version");
+        sb.AppendLine($"  {"-h, --help",-30} - Show help");
         sb.AppendLine();
         sb.AppendLine("METADATA OVERRIDES (used with `add`)");
-        sb.AppendLine($"  {"--type <movie|show>",-24} - Force media type");
-        sb.AppendLine($"  {"--title <name>",-24} - Override title");
-        sb.AppendLine($"  {"--year <yyyy>",-24} - Override release year");
-        sb.AppendLine($"  {"--season <num>",-24} - Season number");
-        sb.AppendLine($"  {"--ep <num>",-24} - Episode number");
+        sb.AppendLine($"  {"--type <movie|show|game|other>",-30} - Force media type");
+        sb.AppendLine($"  {"--title <name>",-30} - Override title");
+        sb.AppendLine($"  {"--year <yyyy>",-30} - Override release year");
+        sb.AppendLine($"  {"--season <num>",-30} - Season number");
+        sb.AppendLine($"  {"--ep <num>",-30} - Episode number");
         sb.AppendLine();
         sb.AppendLine("CONFIGURATION (used with `set`)");
         
         var metadata = GetConfigurationMetadata();
         foreach (var (key, type, desc) in metadata)
         {
-            sb.AppendLine($"  {key,-24} - {desc}");
+            sb.AppendLine($"  {key,-30} - {desc}");
         }
 
         return sb.ToString();

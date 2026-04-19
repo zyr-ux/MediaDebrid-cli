@@ -78,7 +78,8 @@ public class TuiApp
                         ctx.Status("[yellow]Resolving metadata from magnet...[/]");
                         resolved = await _metadataResolver.ResolveAsync(magnetName, typeOverride, cancellationToken: cancellationToken);
                         ApplyOverrides(resolved);
-                        RenderMetadataPanel(resolved, magnetName);
+                        resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, resolved.Season);
+                        RenderMetadataPanel(resolved);
                     }
 
                     var hash = MagnetParser.ExtractHash(magnet);
@@ -110,7 +111,8 @@ public class TuiApp
                         ctx.Status("[yellow]Resolving metadata from Real-Debrid filename...[/]");
                         resolved = await _metadataResolver.ResolveAsync(info.Filename, typeOverride, cancellationToken: cancellationToken);
                         ApplyOverrides(resolved);
-                        RenderMetadataPanel(resolved, info.Filename);
+                        resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, resolved.Season);
+                        RenderMetadataPanel(resolved);
                     }
 
                     ctx.Status("[yellow]Waiting for Real-Debrid status...[/]");
@@ -170,7 +172,7 @@ public class TuiApp
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Error during initialization:[/] [white]{ex.Message}[/]");
+                    AnsiConsole.MarkupLine($"[red]Error during initialization:[/] [white]{Markup.Escape(ex.Message)}[/]");
                 }
             });
 
@@ -209,7 +211,7 @@ public class TuiApp
                                 // Skip if file already exists or episode already exists
                                 if (File.Exists(destPath))
                                 {
-                                    var skipTask = ctx.AddTask($"[yellow]SKIPPED:[/] [cyan]{filename}[/] (Already exists locally)", new ProgressTaskSettings { AutoStart = false });
+                                    var skipTask = ctx.AddTask($"[yellow]SKIPPED:[/] [cyan]{Markup.Escape(filename)}[/] (Already exists locally)", new ProgressTaskSettings { AutoStart = false });
                                     skipTask.Increment(100);
                                     skipTask.StopTask();
                                     continue;
@@ -220,7 +222,7 @@ public class TuiApp
                                     var ep = Utils.ExtractEpisodeNumber(filename);
                                     if (ep.HasValue && existingEpisodes != null && existingEpisodes.Contains(ep.Value))
                                     {
-                                        var skipTask = ctx.AddTask($"[yellow]SKIPPED:[/] [cyan]{filename}[/] (Episode {ep.Value} already exists)", new ProgressTaskSettings { AutoStart = false });
+                                        var skipTask = ctx.AddTask($"[yellow]SKIPPED:[/] [cyan]{Markup.Escape(filename)}[/] (Episode {ep.Value} already exists)", new ProgressTaskSettings { AutoStart = false });
                                         skipTask.Increment(100);
                                         skipTask.StopTask();
                                         continue;
@@ -233,7 +235,7 @@ public class TuiApp
 
                                 var displayFilename = filename.Length > 40 ? filename[..37] + "..." : filename;
 
-                                progressTask = ctx.AddTask($"[cyan]{displayFilename}[/]", new ProgressTaskSettings { AutoStart = false });
+                                progressTask = ctx.AddTask($"[cyan]{Markup.Escape(displayFilename)}[/]", new ProgressTaskSettings { AutoStart = false });
                                 _progressTasks[progressKey] = progressTask;
                                 progressTask.StartTask();
 
@@ -250,7 +252,7 @@ public class TuiApp
                             catch (Exception ex)
                             {
                                 progressTask?.StopTask();
-                                throw new TerminationException($"[red]Download failed:[/] {ex.Message}");
+                                throw new TerminationException($"[red]Download failed:[/] {Markup.Escape(ex.Message)}");
                             }
                         }
                     }, cancellationToken);
@@ -289,7 +291,7 @@ public class TuiApp
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"\n[red]Critical error during download process:[/] {ex.Message}");
+            AnsiConsole.MarkupLine($"\n[red]Critical error during download process:[/] {Markup.Escape(ex.Message)}");
         }
     }
 
@@ -373,11 +375,25 @@ public class TuiApp
                 Settings.Instance.TmdbReadAccessToken = string.IsNullOrWhiteSpace(response) ? "" : response;
             }
 
-            if (Settings.Instance.MediaRoot == "./media" || string.IsNullOrWhiteSpace(Settings.Instance.MediaRoot))
+            if (string.IsNullOrWhiteSpace(Settings.Instance.RawgApiKey))
             {
+                var response = await CancellablePromptAsync(
+                    new TextPrompt<string>("Enter [green]RAWG API Key[/] (Optional, press Enter to skip):")
+                        .AllowEmpty()
+                        .PromptStyle("white")
+                        .Secret(),
+                    cancellationToken
+                );
+                
+                Settings.Instance.RawgApiKey = string.IsNullOrWhiteSpace(response) ? "" : response;
+            }
+
+            if (string.IsNullOrWhiteSpace(Settings.Instance.MediaRoot))
+            {
+                var defaultPath = Settings.DefaultBaseRoot;
                 Settings.Instance.MediaRoot = await CancellablePromptAsync(
-                    new TextPrompt<string>("Enter [green]Media Root Path[/]:")
-                        .DefaultValue("./media")
+                    new TextPrompt<string>("Enter [green]Movies/Shows Root Path[/]:")
+                        .DefaultValue(defaultPath)
                         .PromptStyle("white"),
                     cancellationToken
                 );
@@ -445,15 +461,49 @@ public class TuiApp
         return await tcs.Task;
     }
 
-    private static void RenderMetadataPanel(MediaMetadata meta, string sourceLabel)
+    private static void RenderMetadataPanel(MediaMetadata meta)
     {
-        var panel = new Panel(new Grid()
+        var grid = new Grid()
             .AddColumn()
             .AddColumn()
-            .AddRow("[bold]Title:[/]", $"[cyan]{meta.Title}[/]")
-            .AddRow("[bold]Year:[/]", $"[cyan]{meta.Year}[/]")
-            .AddRow("[bold]Type:[/]", $"[cyan]{meta.Type}[/]")
-            .AddRow("[bold]Source:[/]", $"[dim]{sourceLabel}[/]"))
+            .AddRow("[bold]Title:[/]", $"[cyan]{Markup.Escape(meta.Title)}[/]");
+
+        if (meta.Type != "other" && !string.IsNullOrWhiteSpace(meta.Year))
+        {
+            grid.AddRow("[bold]Year:[/]", $"[cyan]{Markup.Escape(meta.Year)}[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Type))
+        {
+            grid.AddRow("[bold]Type:[/]", $"[cyan]{char.ToUpper(meta.Type[0]) + meta.Type[1..]}[/]");
+        }
+
+        if (meta.Season.HasValue)
+        {
+            grid.AddRow("[bold]Season:[/]", $"[cyan]{meta.Season.Value}[/]");
+        }
+
+        if (meta.Episode.HasValue)
+        {
+            grid.AddRow("[bold]Episode:[/]", $"[cyan]{meta.Episode.Value}[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Version))
+        {
+            grid.AddRow("[bold]Version:[/]", $"[cyan]{Markup.Escape(meta.Version)}[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Source))
+        {
+            grid.AddRow("[bold]Source:[/]", $"[dim]{Markup.Escape(meta.Source)}[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Destination))
+        {
+            grid.AddRow("[bold]Location:[/]", $"[dim]{Markup.Escape(meta.Destination)}[/]");
+        }
+
+        var panel = new Panel(grid)
         {
             Header = new PanelHeader("Resolved Metadata", Justify.Center),
             Border = BoxBorder.Rounded,

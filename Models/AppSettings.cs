@@ -10,8 +10,16 @@ public class AppSettings
     public string RealDebridApiToken { get; set; } = "";
 
     [JsonPropertyName("media_root")]
-    [Description("Base download path (default: ./media)")]
-    public string MediaRoot { get; set; } = "./media";
+    [Description("Download path for Movies & Shows (default: Downloads/MediaDebrid)")]
+    public string MediaRoot { get; set; } = "";
+
+    [JsonPropertyName("games_root")]
+    [Description("Download path for Games (default: Downloads/MediaDebrid)")]
+    public string GamesRoot { get; set; } = "";
+
+    [JsonPropertyName("others_root")]
+    [Description("Download path for miscellaneous files (default: Downloads/MediaDebrid)")]
+    public string OthersRoot { get; set; } = "";
 
     [JsonPropertyName("parallel_download")]
     [Description("Enable chunked downloads (default: true)")]
@@ -22,7 +30,7 @@ public class AppSettings
     public int ConnectionsPerFile { get; set; } = 8;
 
     [JsonPropertyName("tmdb_access_token")]
-    [Description("Required. TMDB read token")]
+    [Description("Optional. TMDB read access token for movies and shows metadata")]
     public string TmdbReadAccessToken { get; set; } = "";
 
     [JsonPropertyName("tmdb_cache_ttl")]
@@ -32,4 +40,8 @@ public class AppSettings
     [JsonPropertyName("skip_existing_episodes")]
     [Description("Skip already downloaded episodes (default: true)")]
     public bool SkipExistingEpisodes { get; set; } = true;
+
+    [JsonPropertyName("rawg_api_key")]
+    [Description("Optional. RAWG.io API key for game metadata")]
+    public string RawgApiKey { get; set; } = "";
 }

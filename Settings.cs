@@ -14,13 +14,26 @@ public static class Settings
 
     public static AppSettings Instance { get; private set; } = new AppSettings();
 
+    // Default path: {User}/Downloads/MediaDebrid
+    public static string DefaultBaseRoot => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), 
+        "Downloads", 
+        "MediaDebrid"
+    );
+
     // Properties for backward compatibility with the rest of the application
     public static string RealDebridApiToken => Instance.RealDebridApiToken;
-    public static string MediaRoot => Instance.MediaRoot;
+    public static string MediaRoot => IsDefault(Instance.MediaRoot) ? DefaultBaseRoot : Instance.MediaRoot;
+    public static string GamesRoot => IsDefault(Instance.GamesRoot) ? DefaultBaseRoot : Instance.GamesRoot;
+    public static string OthersRoot => IsDefault(Instance.OthersRoot) ? DefaultBaseRoot : Instance.OthersRoot;
+
+    private static bool IsDefault(string path) => string.IsNullOrWhiteSpace(path) || path.Equals("default", StringComparison.OrdinalIgnoreCase);
+
     public static bool ParallelDownloadEnabled => Instance.ParallelDownloadEnabled;
     public static int ConnectionsPerFile => Instance.ConnectionsPerFile;
     public static string TmdbReadAccessToken => Instance.TmdbReadAccessToken;
     public static int TmdbCacheTtlSeconds => Instance.TmdbCacheTtlSeconds;
+    public static string RawgApiKey => Instance.RawgApiKey;
 
     public static void Load()
     {
@@ -43,7 +56,9 @@ public static class Settings
         Env.TraversePath().Load();
 
         Instance.RealDebridApiToken = Environment.GetEnvironmentVariable("REAL_DEBRID_API_TOKEN") ?? "";
-        Instance.MediaRoot = Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? "./media";
+        Instance.MediaRoot = Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? "";
+        Instance.GamesRoot = Environment.GetEnvironmentVariable("GAMES_ROOT") ?? "";
+        Instance.OthersRoot = Environment.GetEnvironmentVariable("OTHERS_ROOT") ?? "";
 
         if (bool.TryParse(Environment.GetEnvironmentVariable("PARALLEL_DOWNLOAD_ENABLED"), out bool pd))
             Instance.ParallelDownloadEnabled = pd;
@@ -58,6 +73,8 @@ public static class Settings
 
         if (bool.TryParse(Environment.GetEnvironmentVariable("SKIP_EXISTING_EPISODES"), out bool skip))
             Instance.SkipExistingEpisodes = skip;
+
+        Instance.RawgApiKey = Environment.GetEnvironmentVariable("RAWG_API_KEY") ?? Instance.RawgApiKey;
 
         // Save immediately if we loaded from legacy methods so next time it uses json
         Save();

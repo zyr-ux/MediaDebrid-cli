@@ -4,33 +4,37 @@ namespace MediaDebrid_cli.Services;
 
 public static class PathGenerator
 {
-    public static string GetDestinationPath(string mediaType, string title, string year, string filename, int? season = null)
+    public static string GetDestinationPath(string? mediaType, string? title, string? year, string filename, int? season = null)
     {
         string safeFilename = Sanitize(filename);
         string baseDir = GetSeasonDirectory(mediaType, title, year, season);
         return Path.Combine(baseDir, safeFilename);
     }
 
-    public static string GetSeasonDirectory(string mediaType, string title, string year, int? season = null)
+    public static string GetSeasonDirectory(string? mediaType, string? title, string? year, int? season = null)
     {
-        string baseDir = Settings.MediaRoot;
-        string safeTitle = Sanitize(title);
-        string safeYear = Sanitize(year);
+        string safeTitle = Sanitize(title ?? "Unknown");
+        string safeYear = Sanitize(year ?? "");
+        string safeType = mediaType ?? "other";
 
         string folderName = string.IsNullOrWhiteSpace(safeYear) ? safeTitle : $"{safeTitle} ({safeYear})";
 
-        if (mediaType.Equals("movie", StringComparison.OrdinalIgnoreCase))
+        if (safeType.Equals("movie", StringComparison.OrdinalIgnoreCase))
         {
-            return Path.Combine(baseDir, "Movies", folderName);
+            return Path.Combine(Settings.MediaRoot, "Movies", folderName);
         }
-        else if (mediaType.Equals("show", StringComparison.OrdinalIgnoreCase))
+        else if (safeType.Equals("show", StringComparison.OrdinalIgnoreCase))
         {
             string seasonStr = season.HasValue ? $"Season {season.Value:D2}" : "Season 01";
-            return Path.Combine(baseDir, "TV Shows", folderName, seasonStr);
+            return Path.Combine(Settings.MediaRoot, "TV Shows", folderName, seasonStr);
+        }
+        else if (safeType.Equals("game", StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.Combine(Settings.GamesRoot, "Games", folderName);
         }
         else
         {
-            return Path.Combine(baseDir, "Other");
+            return Path.Combine(Settings.OthersRoot, "Other");
         }
     }
 
