@@ -45,11 +45,12 @@ public class MetadataResolver
         {
             try
             {
-                var gameInfo = await ResolveGameAsync(parsed.Title, cancellationToken);
+                string searchTitle = CleanTitleForSearch(parsed.Title);
+                var gameInfo = await ResolveGameAsync(searchTitle, cancellationToken);
                 if (gameInfo != null)
                 {
-                    parsed.Title = gameInfo.Title;
-                    // Only overwrite year if it's empty or the API found a better one
+                    // KEEP the local title as the source of truth
+                    // Only use API to supplement missing info like Year
                     if (string.IsNullOrEmpty(parsed.Year)) parsed.Year = gameInfo.Year;
                     parsed.Type = "game";
                 }
@@ -126,6 +127,18 @@ public class MetadataResolver
         return null;
     }
 
+    private string CleanTitleForSearch(string title)
+    {
+        // Remove marketing suffixes, special editions, and release groups
+        string cleaned = Regex.Replace(title, @"(?i)\b(digital|deluxe|edition|collector'?s|premium|goty|complete|remastered|ultimate|standard|anniversary|repack|fitgirl|dodi|v\d+(\.\d+)*)\b", "");
+        
+        // Remove symbols that interfere with search
+        cleaned = Regex.Replace(cleaned, @"[:\-\(\)\[\]]", " ");
+        
+        // Final trim and whitespace normalization
+        return Regex.Replace(cleaned, @"\s+", " ").Trim();
+    }
+
     public MediaMetadata ParseName(string name)
     {
         var result = new MediaMetadata();
@@ -177,7 +190,17 @@ public class MetadataResolver
             {
                 result.Year = yearMatch.Groups["year"].Value;
                 if (string.IsNullOrEmpty(result.Type)) result.Type = "movie";
-                if (titlePart.Length > yearMatch.Index) titlePart = name[..yearMatch.Index];
+                
+                // For games, only truncate at the year if it's at the end or in brackets
+                // This prevents "Cyberpunk 2077 Ultimate Edition" becoming just "Cyberpunk"
+                bool shouldTruncate = result.Type != "game" || 
+                                     yearMatch.Index > name.Length - 10 || 
+                                     (yearMatch.Index > 0 && (name[yearMatch.Index - 1] == '(' || name[yearMatch.Index - 1] == '['));
+
+                if (shouldTruncate && titlePart.Length > yearMatch.Index) 
+                {
+                    titlePart = name[..yearMatch.Index];
+                }
             }
         }
 
