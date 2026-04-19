@@ -81,7 +81,11 @@ internal static class Program
                     {
                         return new HelpSectionDelegate[]
                         {
-                            ctx => ctx.Output.Write(Utils.GetRootHelpDescription())
+                            ctx => 
+                            {
+                                TuiApp.ShowLogo();
+                                ctx.Output.Write(Utils.GetRootHelpDescription());
+                            }
                         };
                     }
                     return HelpBuilder.Default.GetLayout();

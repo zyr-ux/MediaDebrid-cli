@@ -111,7 +111,6 @@ public static class Utils
     public static string GetRootHelpDescription()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("MediaDebrid CLI");
         sb.AppendLine("Magnet → Media downloader");
         sb.AppendLine();
         sb.AppendLine("USAGE");
