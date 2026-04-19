@@ -89,6 +89,19 @@ public static class Utils
         return JsonSerializer.Serialize(Settings.Instance, options);
     }
 
+    public static List<(string Key, string Type)> GetConfigurationMetadata()
+    {
+        var metadata = new List<(string Key, string Type)>();
+        var properties = typeof(AppSettings).GetProperties();
+        foreach (var prop in properties)
+        {
+            var attr = prop.GetCustomAttribute<JsonPropertyNameAttribute>();
+            var propName = attr != null ? attr.Name : prop.Name;
+            metadata.Add((propName, prop.PropertyType.Name));
+        }
+        return metadata;
+    }
+
     public static bool IsEpisodeMatch(string path, int episodeNumber)
     {
         // Try to match episode number in path (e.g., E05, Episode 5, x05)

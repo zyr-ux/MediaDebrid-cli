@@ -66,6 +66,18 @@ public class RealDebridClient
         return await HandleResponseAsync<UnrestrictResponse>(res, cancellationToken);
     }
 
+    public async Task<TorrentInfo> WaitForStatusAsync(string torrentId, string[] targetStatuses, CancellationToken cancellationToken, int pollDelayMs = 2000)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var info = await GetTorrentInfoAsync(torrentId, cancellationToken);
+            if (targetStatuses.Contains(info.Status)) return info;
+            await Task.Delay(pollDelayMs, cancellationToken);
+        }
+
+        throw new OperationCanceledException();
+    }
+
     private async Task<T> HandleResponseAsync<T>(HttpResponseMessage res, CancellationToken cancellationToken)
     {
         if (!res.IsSuccessStatusCode)

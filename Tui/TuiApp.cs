@@ -115,12 +115,7 @@ public class TuiApp
                     }
 
                     ctx.Status("[yellow]Waiting for Real-Debrid status...[/]");
-                    while (!cancellationToken.IsCancellationRequested)
-                    {
-                        info = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken: cancellationToken);
-                        if (info.Status is "waiting_files_selection" or "downloaded" or "dead") break;
-                        await Task.Delay(2000, cancellationToken);
-                    }
+                    info = await GetClient().WaitForStatusAsync(torrentId, new[] { "waiting_files_selection", "downloaded", "dead" }, cancellationToken);
 
                     if (info.Status == "dead")
                     {
@@ -159,12 +154,7 @@ public class TuiApp
                         AnsiConsole.MarkupLine("[green]✓[/] Selected relevant files.");
 
                         ctx.Status("[yellow]Waiting for Real-Debrid to cache files...[/]");
-                        while (!cancellationToken.IsCancellationRequested)
-                        {
-                            info = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken: cancellationToken);
-                            if (info.Status == "downloaded") break;
-                            await Task.Delay(5000, cancellationToken);
-                        }
+                        info = await GetClient().WaitForStatusAsync(torrentId, new[] { "downloaded" }, cancellationToken, pollDelayMs: 5000);
                     }
 
                     AnsiConsole.MarkupLine("[green]✓[/] Files are ready and cached!");
@@ -387,11 +377,10 @@ public class TuiApp
             if (message.Contains("not found"))
             {
                 AnsiConsole.MarkupLine("Available keys:");
-                foreach (var prop in typeof(AppSettings).GetProperties())
+                var metadata = Utils.GetConfigurationMetadata();
+                foreach (var (propName, typeName) in metadata)
                 {
-                    var attr = prop.GetCustomAttribute<JsonPropertyNameAttribute>();
-                    var propName = attr != null ? attr.Name : prop.Name;
-                    AnsiConsole.MarkupLine($"- [cyan]{propName}[/] ({prop.PropertyType.Name})");
+                    AnsiConsole.MarkupLine($"- [cyan]{propName}[/] ({typeName})");
                 }
             }
         }
