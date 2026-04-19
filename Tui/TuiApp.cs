@@ -184,7 +184,6 @@ public class TuiApp
         AnsiConsole.MarkupLine("\n[bold]Starting Downloads...[/]");
 
         var activePaths = new ConcurrentBag<string>();
-        var allDownloadTasks = new List<Task>();
         try
         {
             await AnsiConsole.Progress()
@@ -198,7 +197,7 @@ public class TuiApp
                     new EtaTimeColumn())
                 .StartAsync(async ctx =>
                 {
-                    var tasks = info.Links.Select(async link =>
+                    foreach (var link in info.Links)
                     {
                         ProgressTask? progressTask = null;
                         try
@@ -210,8 +209,10 @@ public class TuiApp
                             // Skip if file already exists or episode already exists
                             if (File.Exists(destPath))
                             {
-                                AnsiConsole.MarkupLine($"[yellow]⚠[/] Skipping [cyan]{filename}[/] (Already exists locally)");
-                                return;
+                                var skipTask = ctx.AddTask($"[yellow]SKIPPED:[/] [cyan]{filename}[/] (Already exists locally)", new ProgressTaskSettings { AutoStart = false });
+                                skipTask.Increment(100);
+                                skipTask.StopTask();
+                                continue;
                             }
 
                             if (resolved.Type == "show" && Settings.Instance.SkipExistingEpisodes)
@@ -219,8 +220,10 @@ public class TuiApp
                                 var ep = Utils.ExtractEpisodeNumber(filename);
                                 if (ep.HasValue && existingEpisodes != null && existingEpisodes.Contains(ep.Value))
                                 {
-                                    AnsiConsole.MarkupLine($"[yellow]⚠[/] Skipping [cyan]{filename}[/] (Episode {ep.Value} already exists)");
-                                    return;
+                                    var skipTask = ctx.AddTask($"[yellow]SKIPPED:[/] [cyan]{filename}[/] (Episode {ep.Value} already exists)", new ProgressTaskSettings { AutoStart = false });
+                                    skipTask.Increment(100);
+                                    skipTask.StopTask();
+                                    continue;
                                 }
                             }
 
@@ -247,19 +250,9 @@ public class TuiApp
                         catch (Exception ex)
                         {
                             progressTask?.StopTask();
-                            AnsiConsole.MarkupLine($"[red]Download failed:[/] {ex.Message}");
+                            throw new TerminationException($"[red]Download failed:[/] {ex.Message}");
                         }
-                    }).ToList();
-
-                    allDownloadTasks.AddRange(tasks);
-
-                    var whenAllTask = Task.WhenAll(tasks);
-                    while (!whenAllTask.IsCompleted)
-                    {
-                        if (cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
-                        await Task.Delay(200, cancellationToken);
                     }
-                    await whenAllTask;
                 });
 
             if (!cancellationToken.IsCancellationRequested)
@@ -267,13 +260,12 @@ public class TuiApp
                 AnsiConsole.MarkupLine("\n[bold green]All downloads completed![/]");
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            var ex = new TerminationException("[red]Termination requested. Cleaning up...[/]");
-            ex.Print();
-            try { await Task.WhenAll(allDownloadTasks); } catch { }
+            var tex = ex as TerminationException ?? new TerminationException("\n[red]Termination requested. Cleaning up...[/]");
+            tex.Print();
             Downloader.CleanupFiles(activePaths);
-            throw ex;
+            throw tex;
         }
         catch (Exception ex)
         {
