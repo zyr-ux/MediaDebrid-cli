@@ -1,4 +1,7 @@
 using System.CommandLine;
+using System.CommandLine.Builder;
+using System.CommandLine.Parsing;
+using System.CommandLine.Help;
 using MediaDebrid_cli.Services;
 using MediaDebrid_cli.Tui;
 using MediaDebrid_cli.Models;
@@ -23,7 +26,7 @@ internal static class Program
 
         var app = new TuiApp();
 
-        var rootCommand = new RootCommand("MediaDebrid — magnet-to-media downloader")
+        var rootCommand = new RootCommand(Utils.GetRootHelpDescription())
         {
             Name = "mediadebrid-cli"
         };
@@ -53,7 +56,7 @@ internal static class Program
 
         // ── set Command ────────────────────────────────────────────────────
         var setCommand = new Command("set", "Set a configuration value");
-        var keyArg = new Argument<string>("key") { Description = "Configuration key (e.g. real_debrid_api_key)" };
+        var keyArg = new Argument<string>("key") { Description = "Configuration key" };
         var valueArg = new Argument<string>("value") { Description = "Configuration value" };
         setCommand.AddArgument(keyArg);
         setCommand.AddArgument(valueArg);
@@ -68,11 +71,29 @@ internal static class Program
 
         rootCommand.AddCommand(listCommand);
 
+        var parser = new CommandLineBuilder(rootCommand)
+            .UseDefaults()
+            .UseHelp(ctx =>
+            {
+                ctx.HelpBuilder.CustomizeLayout(helpContext =>
+                {
+                    if (helpContext.Command is RootCommand)
+                    {
+                        return new HelpSectionDelegate[]
+                        {
+                            ctx => ctx.Output.Write(Utils.GetRootHelpDescription())
+                        };
+                    }
+                    return HelpBuilder.Default.GetLayout();
+                });
+            })
+            .Build();
+
         // ── Interactive mode (no args) ─────────────────────────────────────
         // ── Execute ────────────────────────────────────────────────────────
         try
         {
-            if (args.Length != 0) return await rootCommand.InvokeAsync(args);
+            if (args.Length != 0) return await parser.InvokeAsync(args);
             await app.RunInteractiveAsync(cts.Token);
             return 0;
 

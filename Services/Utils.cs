@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -89,17 +91,57 @@ public static class Utils
         return JsonSerializer.Serialize(Settings.Instance, options);
     }
 
-    public static List<(string Key, string Type)> GetConfigurationMetadata()
+    public static List<(string Key, string Type, string Description)> GetConfigurationMetadata()
     {
-        var metadata = new List<(string Key, string Type)>();
+        var metadata = new List<(string Key, string Type, string Description)>();
         var properties = typeof(AppSettings).GetProperties();
         foreach (var prop in properties)
         {
-            var attr = prop.GetCustomAttribute<JsonPropertyNameAttribute>();
-            var propName = attr != null ? attr.Name : prop.Name;
-            metadata.Add((propName, prop.PropertyType.Name));
+            var jsonAttr = prop.GetCustomAttribute<JsonPropertyNameAttribute>();
+            var descAttr = prop.GetCustomAttribute<DescriptionAttribute>();
+            
+            var propName = jsonAttr != null ? jsonAttr.Name : prop.Name;
+            var description = descAttr != null ? descAttr.Description : "";
+            
+            metadata.Add((propName, prop.PropertyType.Name, description));
         }
         return metadata;
+    }
+
+    public static string GetRootHelpDescription()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("MediaDebrid CLI");
+        sb.AppendLine("Magnet → Media downloader");
+        sb.AppendLine();
+        sb.AppendLine("USAGE");
+        sb.AppendLine("  mediadebrid-cli <command> [options]");
+        sb.AppendLine();
+        sb.AppendLine("COMMANDS");
+        sb.AppendLine($"  {"add <magnet>",-24} - Add a magnet and start downloading");
+        sb.AppendLine($"  {"set <key> <value>",-24} - Set a configuration value");
+        sb.AppendLine($"  {"list",-24} - Show current configuration");
+        sb.AppendLine();
+        sb.AppendLine("OPTIONS");
+        sb.AppendLine($"  {"-v, --version",-24} - Show version");
+        sb.AppendLine($"  {"-h, --help",-24} - Show help");
+        sb.AppendLine();
+        sb.AppendLine("METADATA OVERRIDES (used with `add`)");
+        sb.AppendLine($"  {"--type <movie|show>",-24} - Force media type");
+        sb.AppendLine($"  {"--title <name>",-24} - Override title");
+        sb.AppendLine($"  {"--year <yyyy>",-24} - Override release year");
+        sb.AppendLine($"  {"--season <num>",-24} - Season number");
+        sb.AppendLine($"  {"--ep <num>",-24} - Episode number");
+        sb.AppendLine();
+        sb.AppendLine("CONFIGURATION (used with `set`)");
+        
+        var metadata = GetConfigurationMetadata();
+        foreach (var (key, type, desc) in metadata)
+        {
+            sb.AppendLine($"  {key,-24} - {desc}");
+        }
+
+        return sb.ToString();
     }
 
     public static bool IsEpisodeMatch(string path, int episodeNumber)

@@ -378,7 +378,7 @@ public class TuiApp
             {
                 AnsiConsole.MarkupLine("Available keys:");
                 var metadata = Utils.GetConfigurationMetadata();
-                foreach (var (propName, typeName) in metadata)
+                foreach (var (propName, typeName, _) in metadata)
                 {
                     AnsiConsole.MarkupLine($"- [cyan]{propName}[/] ({typeName})");
                 }
