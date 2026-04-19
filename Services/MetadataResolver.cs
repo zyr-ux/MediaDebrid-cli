@@ -73,32 +73,47 @@ public class MetadataResolver
     private TMDBModels ParseName(string name)
     {
         var result = new TMDBModels();
+        string titlePart = name;
 
+        // 1. Try S01E01 pattern
         var seMatch = Regex.Match(name, @"S(?<season>\d{1,2})E(?<episode>\d{1,2})", RegexOptions.IgnoreCase);
         if (seMatch.Success)
         {
             result.Season = int.Parse(seMatch.Groups["season"].Value);
             result.Episode = int.Parse(seMatch.Groups["episode"].Value);
-            result.Title = name[..seMatch.Index].Replace(".", " ").Replace("_", " ").Trim();
+            titlePart = seMatch.Index > 2 ? name[..seMatch.Index] : name[(seMatch.Index + seMatch.Length)..];
         }
         else
         {
+            // 2. Try Year pattern
             var yearMatch = Regex.Match(name, @"\b(?<year>19\d{2}|20\d{2})\b");
             if (yearMatch.Success)
             {
                 result.Year = yearMatch.Groups["year"].Value;
-                result.Title = name[..yearMatch.Index].Replace(".", " ").Replace("_", " ").Replace("(", "").Trim();
+                titlePart = yearMatch.Index > 2 ? name[..yearMatch.Index] : name[(yearMatch.Index + yearMatch.Length)..];
             }
             else
             {
+                // 3. Try Resolution pattern
                 var resMatch = Regex.Match(name, @"(?i)(1080p|720p|2160p|4k|blu-ray)");
-                result.Title = resMatch.Success
-                    ? name[..resMatch.Index].Replace(".", " ").Replace("_", " ").Trim()
-                    : name.Replace(".", " ").Trim();
+                if (resMatch.Success)
+                {
+                    titlePart = resMatch.Index > 2 ? name[..resMatch.Index] : name[(resMatch.Index + resMatch.Length)..];
+                }
             }
         }
 
-        result.Title = Regex.Replace(result.Title, @"\s+", " ").Trim('-');
+        // Clean up title
+        string cleanedTitle = titlePart.Replace(".", " ").Replace("_", " ").Replace("(", "").Replace(")", "").Trim();
+        cleanedTitle = Regex.Replace(cleanedTitle, @"\s+", " ").Trim('-', ' ');
+
+        // Fallback if title is empty or too short
+        if (string.IsNullOrWhiteSpace(cleanedTitle) || cleanedTitle.Length < 2)
+        {
+            cleanedTitle = name.Replace(".", " ").Replace("_", " ").Trim();
+        }
+
+        result.Title = cleanedTitle;
         return result;
     }
 }

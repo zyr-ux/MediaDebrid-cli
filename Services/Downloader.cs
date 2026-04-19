@@ -273,8 +273,7 @@ public class Downloader
             try { File.SetAttributes(tempPath, FileAttributes.Normal); } catch { }
         }
 
-        if (File.Exists(destPath)) File.Delete(destPath);
-        File.Move(tempPath, destPath);
+        File.Move(tempPath, destPath, overwrite: true);
     }
 
     private List<Tuple<long, long>> PlanByteRanges(long totalSize, int segments)

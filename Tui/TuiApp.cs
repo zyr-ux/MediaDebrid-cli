@@ -85,8 +85,7 @@ public class TuiApp
                     if (!string.IsNullOrEmpty(hash))
                     {
                         ctx.Status($"[yellow]Checking for existing torrent with hash {hash}...[/]");
-                        var existingTorrents = await GetClient().GetTorrentsAsync(cancellationToken: cancellationToken);
-                        var matched = existingTorrents.FirstOrDefault(t => t.Hash.Equals(hash, StringComparison.OrdinalIgnoreCase));
+                        var matched = await GetClient().FindTorrentByHashAsync(hash, cancellationToken);
 
                         if (matched != null)
                         {
@@ -143,7 +142,13 @@ public class TuiApp
                     {
                         ctx.Status("[yellow]Selecting files...[/]");
                         var fileIds = Utils.GetSelectedFiles(info.Files, episodeOverride, existingEpisodes);
-                        if (!fileIds.Any()) fileIds = new[] { info.Files.First().Id.ToString() };
+                        if (!fileIds.Any() && info.Files.Any()) fileIds = new[] { info.Files.First().Id.ToString() };
+                        
+                        if (!fileIds.Any())
+                        {
+                            AnsiConsole.MarkupLine("[red]✗[/] No files found to download.");
+                            return;
+                        }
 
                         if (episodeOverride.HasValue && !info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, episodeOverride.Value)))
                         {
@@ -266,7 +271,12 @@ public class TuiApp
         }
         catch (OperationCanceledException ex)
         {
-            var tex = ex as TerminationException ?? new TerminationException("\n[red]Termination requested. Cleaning up...[/]");
+            var tex = ex as TerminationException;
+            if (tex == null)
+            {
+                tex = new TerminationException("\n[red]Termination requested. Cleaning up...[/]");
+            }
+            
             tex.Print();
             
             if (downloadLoopTask != null)

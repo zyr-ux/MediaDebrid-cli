@@ -32,10 +32,27 @@ public class RealDebridClient
         return await HandleResponseAsync<TorrentAddResponse>(res, cancellationToken);
     }
 
-    public async Task<List<TorrentItem>> GetTorrentsAsync(int limit = 50, CancellationToken cancellationToken = default)
+    public async Task<List<TorrentItem>> GetTorrentsAsync(int page = 1, int limit = 50, CancellationToken cancellationToken = default)
     {
-        var res = await _client.GetAsync($"{BaseUrl}/torrents?limit={limit}", cancellationToken);
+        var res = await _client.GetAsync($"{BaseUrl}/torrents?page={page}&limit={limit}", cancellationToken);
         return await HandleResponseAsync<List<TorrentItem>>(res, cancellationToken);
+    }
+
+    public async Task<TorrentItem?> FindTorrentByHashAsync(string hash, CancellationToken cancellationToken = default)
+    {
+        int page = 1;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var torrents = await GetTorrentsAsync(page, 100, cancellationToken);
+            if (torrents == null || !torrents.Any()) break;
+
+            var match = torrents.FirstOrDefault(t => t.Hash.Equals(hash, StringComparison.OrdinalIgnoreCase));
+            if (match != null) return match;
+
+            if (torrents.Count < 100) break;
+            page++;
+        }
+        return null;
     }
 
     public async Task<TorrentInfo> GetTorrentInfoAsync(string torrentId, CancellationToken cancellationToken = default)
