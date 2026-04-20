@@ -21,6 +21,7 @@ public class TuiApp
     {
         _downloader = new Downloader();
         _downloader.ProgressChanged += OnDownloadProgressChanged;
+        _downloader.OnPauseChanged += OnPauseChanged;
         _metadataResolver = new MetadataResolver();
 
         _progressTasks = new ConcurrentDictionary<string, ProgressTask>();
@@ -264,6 +265,8 @@ public class TuiApp
                     new EtaTimeColumn())
                 .StartAsync(async ctx =>
                 {
+                    AnsiConsole.MarkupLine("[dim]Press [yellow]P[/] to Pause/Resume downloads[/]");
+
                     downloadLoopTask = Task.Run(async () =>
                     {
                         foreach (var link in info.Links)
@@ -330,6 +333,16 @@ public class TuiApp
                     while (!downloadLoopTask.IsCompleted)
                     {
                         if (cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
+                        
+                        if (Console.KeyAvailable)
+                        {
+                            var key = Console.ReadKey(true);
+                            if (key.Key == ConsoleKey.P)
+                            {
+                                _downloader.TogglePause();
+                            }
+                        }
+                        
                         await Task.Delay(200, cancellationToken);
                     }
 
@@ -602,6 +615,22 @@ public class TuiApp
             }
 
             task.Value = e.BytesDownloaded;
+        }
+    }
+
+    private void OnPauseChanged(bool isPaused)
+    {
+        foreach (var task in _progressTasks.Values)
+        {
+            var current = task.Description;
+            if (isPaused && !current.StartsWith("[yellow]PAUSED[/]"))
+            {
+                task.Description = $"[yellow]PAUSED[/] {current}";
+            }
+            else if (!isPaused && current.StartsWith("[yellow]PAUSED[/]"))
+            {
+                task.Description = current.Replace("[yellow]PAUSED[/] ", "");
+            }
         }
     }
 

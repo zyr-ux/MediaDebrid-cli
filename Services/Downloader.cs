@@ -9,6 +9,9 @@ public class Downloader
 {
     private readonly HttpClient _httpClient;
     private static readonly ConcurrentDictionary<string, string> _activeTempFiles = new();
+    private bool _isPaused;
+    public bool IsPaused => _isPaused;
+    public event Action<bool>? OnPauseChanged;
 
     static Downloader()
     {
@@ -96,6 +99,12 @@ public class Downloader
         _httpClient = new HttpClient();
     }
 
+    public void TogglePause()
+    {
+        _isPaused = !_isPaused;
+        OnPauseChanged?.Invoke(_isPaused);
+    }
+
     public async Task DownloadFileAsync(string url, string destPath, string? rootPath = null, string? progressKey = null, CancellationToken cancellationToken = default)
     {
         bool segmented = Settings.ParallelDownloadEnabled;
@@ -155,6 +164,11 @@ public class Downloader
                 int read;
                 while ((read = await stream.ReadAsync(buffer, 0, buffer.Length, internalCts.Token)) > 0)
                 {
+                    while (_isPaused)
+                    {
+                        await Task.Delay(200, internalCts.Token);
+                    }
+
                     await fileStream.WriteAsync(buffer, 0, read, internalCts.Token);
                     var currentDownloaded = Interlocked.Add(ref bytesDownloaded, read);
 
@@ -218,6 +232,11 @@ public class Downloader
             int read;
             while ((read = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
             {
+                while (_isPaused)
+                {
+                    await Task.Delay(200, cancellationToken);
+                }
+
                 await fileStream.WriteAsync(buffer, 0, read, cancellationToken);
                 bytesDownloaded += read;
 
