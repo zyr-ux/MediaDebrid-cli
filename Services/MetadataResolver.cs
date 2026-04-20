@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using MediaDebrid_cli.Models;
 
 namespace MediaDebrid_cli.Services;
@@ -38,7 +33,8 @@ public partial class MetadataResolver
         "reward", "lpd", "veto", "tdo", "ghouls", "jigsaw", "omp", "cmrg", "tgx",
         "amzn", "nf", "dsnp", "hmax", "atvp", "psa", "rbg",
         "subsplease", "erai", "horriblesubs", "judas", "commie", "asw", "doki",
-        "ember", "kametsu", "motive", "nano", "bss"
+        "ember", "kametsu", "motive", "nano", "bss",
+        "fitgirl", "dodi", "elamigos", "xatab", "rg", "chovka", "kaos", "darck", "blackbox"
     };
 
     private static readonly HashSet<string> AnimeContextTags = new(StringComparer.OrdinalIgnoreCase)
@@ -46,6 +42,13 @@ public partial class MetadataResolver
         "subsplease", "erai", "horriblesubs", "judas", "commie", "asw", "doki",
         "ember", "kametsu", "motive", "nano", "bss", "anime", "ova", "ona",
         "ncop", "nced", "special", "batch", "dual", "sub", "dub"
+    };
+
+    private static readonly HashSet<string> KnownReleaseGroups = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "fitgirl", "dodi", "razor1911", "reloaded", "skidrow", "codex", "plaza", "cpy", 
+        "empress", "flt", "rune", "goldberg", "p2p", "tenoke", "simplex", "darksiders", 
+        "tinyiso", "darck", "blackbox", "xatab", "chovka", "rg mechanics", "elamigos", "kaos"
     };
 
     private static readonly HashSet<string> SoftSingleTokens = new(StringComparer.OrdinalIgnoreCase)
@@ -59,7 +62,10 @@ public partial class MetadataResolver
         "x264", "x265", "h264", "h265", "hevc", "av1", "vp9", "vc1", "avc",
         "mpeg2", "divx", "xvid", "10bit", "hdr", "hdr10", "hdr10plus", "dv",
         "dovi", "truehd", "dts", "ma", "atmos", "ac3", "aac", "mp3", "flac",
-        "mono", "stereo"
+        "mono", "stereo",
+        "razor1911", "reloaded", "skidrow", "codex", "plaza", "cpy", "empress",
+        "flt", "rune", "goldberg", "p2p", "tenoke", "simplex", "darksiders", "tinyiso",
+        "steam", "gog", "cracked", "crack", "update", "patch", "dlc", "bonus"
     };
 
     private static readonly HashSet<string> SoftPhrases = new(StringComparer.OrdinalIgnoreCase)
@@ -79,13 +85,20 @@ public partial class MetadataResolver
         "true hd",
         "dts hd",
         "dts ma",
-        "hdr10 plus"
+        "hdr10 plus",
+        "early access",
+        "bonus content",
+        "day one edition",
+        "game of the year edition",
+        "goty edition",
+        "premium edition",
+        "gold edition"
     };
 
     [GeneratedRegex(@"^\[REQ\]\s*|^\(REQ\)\s*", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
     private static partial Regex ReqPrefixRegex();
 
-    [GeneratedRegex(@"(?i)\b(?:fitgirl|dodi|repack|razor1911|reloaded|skidrow|codex|plaza|cpy|steam|gog|cracked|multi\d+|setup[- ._]?fitgirl|elamigos|kaos|empress|flt|rune|goldberg|p2p)\b", RegexOptions.Compiled)]
+    [GeneratedRegex(@"(?i)\b(?:fitgirl|dodi|repack|razor1911|reloaded|skidrow|codex|plaza|cpy|steam|gog|cracked|multi\d+|setup[- ._]?fitgirl|elamigos|kaos|empress|flt|rune|goldberg|p2p|tenoke|simplex|darksiders|tinyiso|darck|blackbox|xatab|chovka|rg\s?mechanics)\b", RegexOptions.Compiled)]
     private static partial Regex GameRegex();
 
     [GeneratedRegex(@"(?i)\b(?:windows|office|adobe|autocad|keygen|activator|patch|installer|portable|multilingual|crack|serial)\b|\.(?:exe|msi|iso|dmg|pkg|appx|apk|bat|cmd|scr)$", RegexOptions.Compiled)]
@@ -115,7 +128,6 @@ public partial class MetadataResolver
     public MediaMetadata ParseName(string name)
     {
         var result = new MediaMetadata();
-        var signals = new List<Signal>();
 
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -135,53 +147,98 @@ public partial class MetadataResolver
             return result;
         }
 
-        bool softwareDetected = LooksLikeSoftware(workingString);
-        bool gameDetected = !softwareDetected && LooksLikeGame(workingString);
-
-        if (softwareDetected)
-        {
-            result.Type = "other";
-            signals.Add(new Signal("TYPE_SOFTWARE_REGEX", 0.0, string.Empty));
-        }
-        else if (gameDetected)
-        {
-            result.Type = "game";
-            signals.Add(new Signal("TYPE_GAME_REGEX", 0.0, string.Empty));
-        }
-
         var tokens = Tokenize(workingString);
+
+        var mediaCandidate = ParseAsMedia(workingString, tokens);
+        var gameCandidate = ParseAsGame(workingString, tokens);
+        var softwareCandidate = ParseAsSoftware(workingString, tokens);
+
+        ApplyCrossDomainSignals(tokens, mediaCandidate.Signals, gameCandidate.Signals, softwareCandidate.Signals);
+
+        // Recalculate confidence after global signals
+        mediaCandidate.Confidence = Math.Clamp(mediaCandidate.Signals.Sum(s => s.Weight), 0.0, 1.0);
+        gameCandidate.Confidence = Math.Clamp(gameCandidate.Signals.Sum(s => s.Weight), 0.0, 1.0);
+        softwareCandidate.Confidence = Math.Clamp(softwareCandidate.Signals.Sum(s => s.Weight), 0.0, 1.0);
+
+        var best = new[] { mediaCandidate, gameCandidate, softwareCandidate }
+            .OrderByDescending(c => c.Confidence)
+            .First();
+
+        var finalResult = best.Metadata;
+        SetConfidenceIfSupported(finalResult, best.Confidence);
+        SetDebugSignalsIfSupported(finalResult, best.Signals);
+
+        return finalResult;
+    }
+
+    private static void ApplyCrossDomainSignals(
+        List<Token> tokens,
+        List<Signal> mediaSignals,
+        List<Signal> gameSignals,
+        List<Signal> softwareSignals)
+    {
+        bool hasResolution = false;
+        bool hasCodec = false;
+        bool hasInstaller = false;
+        bool hasDlc = false;
+
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var txt = tokens[i].NormalizedText;
+            var next = i + 1 < tokens.Count ? tokens[i + 1].NormalizedText : string.Empty;
+
+            if (IsResolutionToken(txt)) hasResolution = true;
+            if (IsCodecToken(txt, next)) hasCodec = true;
+            if (txt is "portable" or "setup" or "crack" or "installer" or "keygen" or "activator") hasInstaller = true;
+            if (txt is "dlc" or "ost" or "soundtrack" or "expansion") hasDlc = true;
+        }
+
+        if (hasResolution)
+        {
+            mediaSignals.Add(new Signal("GLOBAL_RESOLUTION", 0.15, string.Empty));
+            gameSignals.Add(new Signal("GLOBAL_RESOLUTION_PENALTY", -0.15, string.Empty));
+            softwareSignals.Add(new Signal("GLOBAL_RESOLUTION_PENALTY", -0.20, string.Empty));
+        }
+
+        if (hasCodec)
+        {
+            mediaSignals.Add(new Signal("GLOBAL_CODEC", 0.15, string.Empty));
+            gameSignals.Add(new Signal("GLOBAL_CODEC_PENALTY", -0.15, string.Empty));
+            softwareSignals.Add(new Signal("GLOBAL_CODEC_PENALTY", -0.20, string.Empty));
+        }
+
+        if (hasInstaller)
+        {
+            softwareSignals.Add(new Signal("GLOBAL_INSTALLER", 0.20, string.Empty));
+            mediaSignals.Add(new Signal("GLOBAL_INSTALLER_PENALTY", -0.30, string.Empty));
+        }
+
+        if (hasDlc)
+        {
+            gameSignals.Add(new Signal("GLOBAL_DLC", 0.15, string.Empty));
+            mediaSignals.Add(new Signal("GLOBAL_DLC_PENALTY", -0.20, string.Empty));
+            softwareSignals.Add(new Signal("GLOBAL_DLC_PENALTY", -0.20, string.Empty));
+        }
+    }
+
+    private static (MediaMetadata Metadata, double Confidence, List<Signal> Signals) ParseAsMedia(string workingString, List<Token> tokens)
+    {
+        var result = new MediaMetadata { Type = "movie" };
+        var signals = new List<Signal> { new Signal("BASE_MEDIA", 0.12, string.Empty) };
         int titleBoundary = tokens.Count;
 
-        bool tvDetected = false;
-        bool absoluteEpisodeDetected = false;
-        bool yearDetected = false;
-        bool resolutionDetected = false;
-        bool qualityDetected = false;
-        bool codecDetected = false;
-        bool versionDetected = false;
-
-        signals.Add(new Signal("BASE", 0.12, string.Empty));
+        bool tvDetected = false, absoluteEpisodeDetected = false, yearDetected = false, resolutionDetected = false;
 
         if (TryDetectTv(tokens, workingString, out var season, out var episode, out var tvBoundary, out absoluteEpisodeDetected))
         {
             tvDetected = true;
             result.Type = "show";
             result.Season = season;
-            if (episode > 0)
-            {
-                result.Episode = episode;
-            }
-
+            if (episode > 0) result.Episode = episode;
             titleBoundary = Math.Min(titleBoundary, tvBoundary);
-            
-            if (absoluteEpisodeDetected)
-            {
-                signals.Add(new Signal("TV_ANIME_ABSOLUTE_EP", 0.20, $"Ep: {episode} [Boundary: {tvBoundary}]"));
-            }
-            else
-            {
-                signals.Add(new Signal("TV_STANDARD", 0.35, $"S: {season}, Ep: {episode} [Boundary: {tvBoundary}]"));
-            }
+            signals.Add(absoluteEpisodeDetected 
+                ? new Signal("TV_ANIME_ABSOLUTE_EP", 0.35, $"Ep: {episode} [Boundary: {tvBoundary}]") 
+                : new Signal("TV_STANDARD", 0.45, $"S: {season}, Ep: {episode} [Boundary: {tvBoundary}]"));
         }
 
         if (TryDetectYear(tokens, out var year, out var yearBoundary))
@@ -202,7 +259,6 @@ public partial class MetadataResolver
 
         if (TryDetectQuality(tokens, out var quality, out var qualityBoundary))
         {
-            qualityDetected = true;
             result.Quality = quality;
             titleBoundary = Math.Min(titleBoundary, qualityBoundary);
             signals.Add(new Signal("QUALITY_DETECTED", 0.10, $"{quality} [Boundary: {qualityBoundary}]"));
@@ -210,65 +266,187 @@ public partial class MetadataResolver
 
         if (TryDetectCodec(tokens, out var codecBoundary))
         {
-            codecDetected = true;
             titleBoundary = Math.Min(titleBoundary, codecBoundary);
             signals.Add(new Signal("CODEC_DETECTED", 0.05, $"[Boundary: {codecBoundary}]"));
         }
 
-        if (TryDetectVersion(workingString, tokens, out var version, out var versionBoundary))
-        {
-            versionDetected = true;
-            result.Version = version;
-
-            if ((result.Type is "game" or "other") && versionBoundary >= 0)
-            {
-                titleBoundary = Math.Min(titleBoundary, versionBoundary);
-            }
-
-            signals.Add(new Signal("VERSION_DETECTED", 0.12, $"{version} [Boundary: {versionBoundary}]"));
-        }
-
         var titleTokens = tokens.Take(Math.Clamp(titleBoundary, 0, tokens.Count)).ToList();
-
         TrimLeadingReleaseTags(titleTokens);
         TrimTrailingSoftTags(titleTokens);
 
-        var cleanedTitle = BuildTitle(titleTokens);
-
-        if (string.IsNullOrWhiteSpace(cleanedTitle))
+        result.Title = BuildTitle(titleTokens);
+        if (string.IsNullOrWhiteSpace(result.Title))
         {
-            cleanedTitle = BuildFallbackTitle(tokens);
-            signals.Add(new Signal("TITLE_FALLBACK_TRIGGERED", 0.0, string.Empty));
+            result.Title = BuildFallbackTitle(tokens);
+            signals.Add(new Signal("TITLE_FALLBACK", -0.1, string.Empty));
         }
+        else signals.Add(new Signal("TITLE_EXISTS", 0.05, string.Empty));
 
-        result.Title = cleanedTitle;
+        if (tvDetected && yearDetected) signals.Add(new Signal("PENALTY_TV_YEAR", -0.10, string.Empty));
+        if (LooksLikeSoftware(workingString) || LooksLikeGame(workingString)) signals.Add(new Signal("PENALTY_MEDIA_MISMATCH", -0.30, string.Empty));
+        if (resolutionDetected && !tvDetected && !yearDetected) signals.Add(new Signal("PENALTY_ORPHAN_RES", -0.05, string.Empty));
 
-        if (string.IsNullOrWhiteSpace(result.Type))
-        {
-            result.Type = "movie";
-            signals.Add(new Signal("TYPE_DEFAULTED_TO_MOVIE", 0.0, string.Empty));
-        }
+        double confidence = Math.Clamp(signals.Sum(s => s.Weight), 0.0, 1.0);
+        return (result, confidence, signals);
+    }
 
-        if (!string.IsNullOrWhiteSpace(result.Title))
-        {
-            signals.Add(new Signal("TITLE_EXISTS", 0.05, string.Empty));
-        }
-
-        if (tvDetected && yearDetected) signals.Add(new Signal("PENALTY_TV_YEAR", absoluteEpisodeDetected ? -0.05 : -0.10, string.Empty));
-        if (tvDetected && resolutionDetected && yearDetected) signals.Add(new Signal("PENALTY_TV_RES_YEAR", -0.12, string.Empty));
-        if ((softwareDetected || gameDetected) && (tvDetected || yearDetected)) signals.Add(new Signal("PENALTY_MEDIA_MISMATCH", -0.08, string.Empty));
-        if (resolutionDetected && !tvDetected && !yearDetected) signals.Add(new Signal("PENALTY_ORPHAN_RES", -0.02, string.Empty));
-        if (qualityDetected && !tvDetected && !yearDetected) signals.Add(new Signal("PENALTY_ORPHAN_QUALITY", -0.02, string.Empty));
-        if (codecDetected && !tvDetected && !yearDetected) signals.Add(new Signal("PENALTY_ORPHAN_CODEC", -0.01, string.Empty));
-        if (versionDetected && yearDetected && (gameDetected || softwareDetected)) signals.Add(new Signal("PENALTY_VERSION_YEAR_MISMATCH", -0.04, string.Empty));
-
-        double confidence = signals.Sum(s => s.Weight);
-        confidence = Math.Clamp(confidence, 0.0, 1.0);
+    private static (MediaMetadata Metadata, double Confidence, List<Signal> Signals) ParseAsGame(string workingString, List<Token> tokens)
+    {
+        var result = new MediaMetadata { Type = "game" };
+        var signals = new List<Signal> { new Signal("BASE_GAME", 0.10, string.Empty) };
         
-        SetConfidenceIfSupported(result, confidence);
-        SetDebugSignalsIfSupported(result, signals);
+        var boundaries = new List<int> { tokens.Count };
 
-        return result;
+        if (LooksLikeGame(workingString)) signals.Add(new Signal("TYPE_GAME_REGEX", 0.30, string.Empty));
+
+        bool hasVersion = TryDetectVersion(workingString, tokens, out var version, out var versionBoundary);
+        if (hasVersion)
+        {
+            result.Version = version;
+            boundaries.Add(versionBoundary);
+            signals.Add(new Signal("VERSION_DETECTED", 0.15, $"{version} [Boundary: {versionBoundary}]"));
+        }
+
+        bool hasEdition = TryDetectGameEdition(tokens, out var edition, out var editionBoundary);
+        if (hasEdition)
+        {
+            result.Edition = edition;
+            boundaries.Add(editionBoundary);
+            signals.Add(new Signal("EDITION_DETECTED", 0.15, $"{edition} [Boundary: {editionBoundary}]"));
+        }
+
+        bool hasGroup = TryDetectReleaseGroup(tokens, out var releaseGroup, out var groupBoundary);
+        if (hasGroup)
+        {
+            result.ReleaseGroup = releaseGroup;
+            boundaries.Add(groupBoundary);
+            signals.Add(new Signal("RELEASE_GROUP", 0.15, $"{releaseGroup} [Boundary: {groupBoundary}]"));
+        }
+
+        bool hasDlc = TryDetectDlc(tokens, out var dlcBoundary);
+        if (hasDlc)
+        {
+            result.HasDlc = true;
+            boundaries.Add(dlcBoundary);
+            signals.Add(new Signal("DLC_DETECTED", 0.10, $"[Boundary: {dlcBoundary}]"));
+        }
+
+        if (TryDetectGameBoundary(tokens, out var gameBoundary))
+        {
+            boundaries.Add(gameBoundary);
+            signals.Add(new Signal("GAME_BOUNDARY_DETECTED", 0.20, $"[Boundary: {gameBoundary}]"));
+        }
+
+        bool hasYear = TryDetectYear(tokens, out var year, out var yearBoundary);
+        if (hasYear)
+        {
+            result.Year = year;
+            boundaries.Add(yearBoundary);
+            signals.Add(new Signal("YEAR_DETECTED", 0.10, $"{year} [Boundary: {yearBoundary}]"));
+        }
+        
+        int comboCount = (hasVersion ? 1 : 0) + (hasEdition ? 1 : 0) + (hasGroup ? 1 : 0) + (hasDlc ? 1 : 0);
+        if (comboCount >= 2)
+        {
+            signals.Add(new Signal("STRONG_GAME_COMBO", 0.25, string.Empty));
+        }
+
+        // Strong positive signals for games
+        if (tokens.Count > 1 && tokens[^1].NormalizedText.Length <= 4 && int.TryParse(tokens[^1].NormalizedText, out _))
+        {
+             signals.Add(new Signal("NUMERIC_TITLE_SUFFIX", 0.10, string.Empty));
+        }
+
+        int titleBoundary = SelectBestBoundary(boundaries, tokens);
+        var titleTokens = tokens.Take(Math.Clamp(titleBoundary, 0, tokens.Count)).ToList();
+        
+        result.Title = BuildTitle(titleTokens);
+        if (string.IsNullOrWhiteSpace(result.Title))
+        {
+            result.Title = BuildFallbackTitle(tokens);
+            signals.Add(new Signal("TITLE_FALLBACK", -0.1, string.Empty));
+        }
+        else signals.Add(new Signal("TITLE_EXISTS", 0.05, string.Empty));
+
+        if (TryDetectTv(tokens, workingString, out _, out _, out _, out _)) signals.Add(new Signal("PENALTY_GAME_TV", -0.40, string.Empty));
+        if (TryDetectResolution(tokens, out _, out _)) signals.Add(new Signal("PENALTY_GAME_RES", -0.20, string.Empty));
+
+        double confidence = Math.Clamp(signals.Sum(s => s.Weight), 0.0, 1.0);
+        return (result, confidence, signals);
+    }
+
+    private static (MediaMetadata Metadata, double Confidence, List<Signal> Signals) ParseAsSoftware(string workingString, List<Token> tokens)
+    {
+        var result = new MediaMetadata { Type = "other" };
+        var signals = new List<Signal> { new Signal("BASE_SOFTWARE", 0.10, string.Empty) };
+        
+        var boundaries = new List<int> { tokens.Count };
+
+        if (LooksLikeSoftware(workingString)) signals.Add(new Signal("TYPE_SOFTWARE_REGEX", 0.35, string.Empty));
+
+        bool hasVersion = TryDetectVersion(workingString, tokens, out var version, out var versionBoundary);
+        if (hasVersion)
+        {
+            result.Version = version;
+            boundaries.Add(versionBoundary);
+            signals.Add(new Signal("VERSION_DETECTED", 0.20, $"{version} [Boundary: {versionBoundary}]"));
+        }
+
+        var osBoundary = tokens.FindIndex(t => t.NormalizedText is "mac" or "macos" or "linux" or "windows" or "win" or "x64" or "x86" or "amd64" or "arm64");
+        bool hasOs = osBoundary >= 0;
+        if (hasOs)
+        {
+            boundaries.Add(osBoundary);
+            signals.Add(new Signal("OS_ARCH_DETECTED", 0.15, $"[Boundary: {osBoundary}]"));
+        }
+        
+        bool hasInstaller = TryDetectInstallerType(tokens, out var installer, out var installBoundary);
+        if (hasInstaller)
+        {
+            result.InstallerType = installer;
+            boundaries.Add(installBoundary);
+            signals.Add(new Signal("INSTALLER_DETECTED", 0.15, $"{installer} [Boundary: {installBoundary}]"));
+        }
+
+        if (TryDetectYear(tokens, out var year, out var yearBoundary))
+        {
+            result.Year = year;
+            boundaries.Add(yearBoundary);
+            signals.Add(new Signal("YEAR_DETECTED", 0.10, $"{year} [Boundary: {yearBoundary}]"));
+        }
+        
+        int comboCount = (hasVersion ? 1 : 0) + (hasOs ? 1 : 0) + (hasInstaller ? 1 : 0);
+        if (comboCount >= 2)
+        {
+            signals.Add(new Signal("STRONG_SOFTWARE_COMBO", 0.25, string.Empty));
+        }
+
+        if (workingString.Contains("adobe", StringComparison.OrdinalIgnoreCase) || 
+            workingString.Contains("microsoft", StringComparison.OrdinalIgnoreCase) ||
+            workingString.Contains("autodesk", StringComparison.OrdinalIgnoreCase))
+        {
+            // Verify it's an actual token to avoid substring false positives
+            if (tokens.Any(t => t.NormalizedText is "adobe" or "microsoft" or "autodesk"))
+            {
+                signals.Add(new Signal("KNOWN_VENDOR", 0.20, string.Empty));
+            }
+        }
+
+        int titleBoundary = SelectBestBoundary(boundaries, tokens);
+        var titleTokens = tokens.Take(Math.Clamp(titleBoundary, 0, tokens.Count)).ToList();
+
+        result.Title = BuildTitle(titleTokens);
+        if (string.IsNullOrWhiteSpace(result.Title))
+        {
+            result.Title = BuildFallbackTitle(tokens);
+            signals.Add(new Signal("TITLE_FALLBACK", -0.1, string.Empty));
+        }
+        else signals.Add(new Signal("TITLE_EXISTS", 0.05, string.Empty));
+
+        if (TryDetectTv(tokens, workingString, out _, out _, out _, out _)) signals.Add(new Signal("PENALTY_SOFT_TV", -0.40, string.Empty));
+
+        double confidence = Math.Clamp(signals.Sum(s => s.Weight), 0.0, 1.0);
+        return (result, confidence, signals);
     }
 
     private static bool LooksLikeSoftware(string input) => SoftwareRegex().IsMatch(input);
@@ -658,15 +836,215 @@ public partial class MetadataResolver
         boundaryIndex = -1;
 
         var match = VersionRegex().Match(original);
-        if (!match.Success) return false;
+        if (match.Success && match.Groups["ver"].Value.Length > 0)
+        {
+            var raw = match.Groups["ver"].Value.Trim().Replace(' ', '.').Replace('_', '.').Replace('-', '.');
+            version = "v" + raw;
+            boundaryIndex = FindTokenIndexAtOrAfter(tokens, match.Index);
+            return true;
+        }
 
-        var raw = match.Groups["ver"].Value.Trim();
-        if (raw.Length == 0) return false;
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var current = tokens[i].NormalizedText;
+            var next = i + 1 < tokens.Count ? tokens[i + 1].NormalizedText : string.Empty;
 
-        raw = raw.Replace(' ', '.').Replace('_', '.').Replace('-', '.');
-        version = "v" + raw;
-        boundaryIndex = FindTokenIndexAtOrAfter(tokens, match.Index);
-        return true;
+            if ((current is "build" or "update" or "patch" or "rev") && next.Length > 0 && char.IsDigit(next[0]))
+            {
+                version = current + " " + next;
+                boundaryIndex = i;
+                return true;
+            }
+
+            if (current.Length > 2 && current.Contains('.') && char.IsDigit(current[0]) && char.IsDigit(current[^1]))
+            {
+                 if (current.Split('.').Length >= 2)
+                 {
+                     version = "v" + current;
+                     boundaryIndex = i;
+                     return true;
+                 }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryDetectGameEdition(IReadOnlyList<Token> tokens, out string edition, out int boundaryIndex)
+    {
+        edition = string.Empty;
+        boundaryIndex = -1;
+
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var current = tokens[i].NormalizedText;
+            
+            if (current is "collection" or "bundle")
+            {
+                 edition = current;
+                 boundaryIndex = i;
+                 
+                 if (i > 0)
+                 {
+                     var prev = tokens[i - 1].NormalizedText;
+                     if (prev is "complete" or "ultimate" or "masterpiece" or "hd" or "remastered")
+                     {
+                         edition = prev + " " + current;
+                         boundaryIndex = i - 1;
+                     }
+                 }
+                 return true;
+            }
+            
+            if (i > 0 && current == "edition")
+            {
+                 var prev = tokens[i - 1].NormalizedText;
+                 if (prev is "deluxe" or "ultimate" or "standard" or "special" or "collectors" or "anniversary" or "complete" or "goty" or "premium" or "gold" or "definitive" or "legendary" or "enhanced" or "directors" or "masterpiece")
+                 {
+                     edition = prev + " edition";
+                     boundaryIndex = i - 1;
+                     
+                     if (i > 1 && prev == "directors" && tokens[i-2].NormalizedText == "cut")
+                     {
+                         edition = "director's cut";
+                         boundaryIndex = i - 2;
+                     }
+                     
+                     return true;
+                 }
+            }
+            if (current == "goty")
+            {
+                 edition = "goty";
+                 boundaryIndex = i;
+                 if (i + 1 < tokens.Count && tokens[i+1].NormalizedText == "edition") edition = "goty edition";
+                 return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool TryDetectReleaseGroup(IReadOnlyList<Token> tokens, out string group, out int boundaryIndex)
+    {
+        group = string.Empty;
+        boundaryIndex = -1;
+
+        for(int i = 0; i < tokens.Count; i++)
+        {
+            var txt = tokens[i].NormalizedText;
+            if (KnownReleaseGroups.Contains(txt))
+            {
+                group = txt;
+                boundaryIndex = i;
+                return true;
+            }
+            
+            if (i < tokens.Count - 1)
+            {
+                var twoWords = txt + " " + tokens[i+1].NormalizedText;
+                if (KnownReleaseGroups.Contains(twoWords))
+                {
+                    group = twoWords;
+                    boundaryIndex = i;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static bool TryDetectDlc(IReadOnlyList<Token> tokens, out int boundaryIndex)
+    {
+        boundaryIndex = -1;
+        for (int i = 0; i < tokens.Count; i++)
+        {
+             if (tokens[i].NormalizedText is "dlc" or "bonus" or "ost" or "soundtrack" or "expansion")
+             {
+                 boundaryIndex = i; return true;
+             }
+        }
+        return false;
+    }
+    
+    private static bool TryDetectInstallerType(IReadOnlyList<Token> tokens, out string installer, out int boundaryIndex)
+    {
+        installer = string.Empty;
+        boundaryIndex = -1;
+
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var current = tokens[i].NormalizedText;
+            if (current is "portable" or "setup" or "crack" or "installer" or "keygen" or "activator" or "retail")
+            {
+                installer = current;
+                boundaryIndex = i;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int SelectBestBoundary(List<int> boundaries, List<Token> tokens)
+    {
+        if (boundaries.Count == 0) return tokens.Count;
+        
+        boundaries.Sort();
+        
+        // If the earliest boundary is right at the start, try to find a better one
+        if (boundaries[0] == 0 && boundaries.Count > 1)
+        {
+            return boundaries[1];
+        }
+        
+        // If year is the earliest boundary, but there's a strong game/software boundary right after, use that instead
+        if (boundaries.Count > 1)
+        {
+            int first = boundaries[0];
+            int second = boundaries[1];
+            if (first >= 0 && first < tokens.Count && IsYearLike(tokens[first].NormalizedText))
+            {
+                if (second > first && second - first <= 2)
+                {
+                    return second; // Prefer the structural boundary over just the year if it immediately follows
+                }
+            }
+        }
+
+        return boundaries[0];
+    }
+
+    private static bool TryDetectGameBoundary(IReadOnlyList<Token> tokens, out int boundaryIndex)
+    {
+        boundaryIndex = -1;
+
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var current = tokens[i].NormalizedText;
+            var next = i + 1 < tokens.Count ? tokens[i + 1].NormalizedText : string.Empty;
+
+            // Removed overlapping tokens already handled by specific extractors
+            if (current is "update" or "patch" or "crack" or "cracked" or "hotfix" or "build" or "repack" or "multi" or "languages" or "lang" or "mod")
+            {
+                boundaryIndex = i; return true;
+            }
+
+            if (current.StartsWith("multi") && current.Length > 5 && char.IsDigit(current[5]))
+            {
+                boundaryIndex = i; return true;
+            }
+
+            if (current is "english" or "french" or "spanish" or "german" or "russian" or "japanese" or "korean" or "chinese")
+            {
+                boundaryIndex = i; return true;
+            }
+
+            if (GameRegex().IsMatch(current))
+            {
+                boundaryIndex = i; return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsResolutionToken(string current) => current is "2160p" or "4k" or "uhd" or "1080p" or "720p" or "480p";

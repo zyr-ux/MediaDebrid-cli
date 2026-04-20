@@ -13,4 +13,8 @@ public class MediaMetadata
     public string? Codec { get; set; }
     public string? Quality { get; set; }
     public string? Destination { get; set; }
+    public string? Edition { get; set; }
+    public string? ReleaseGroup { get; set; }
+    public string? InstallerType { get; set; }
+    public bool? HasDlc { get; set; }
 }
