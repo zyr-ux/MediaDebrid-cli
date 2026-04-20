@@ -118,6 +118,7 @@ public static class Utils
         sb.AppendLine();
         sb.AppendLine("COMMANDS");
         sb.AppendLine($"  {"add <magnet>",-30} - Add a magnet and start downloading");
+        sb.AppendLine($"  {"resume <path>",-30} - Resume download from .mdebrid file");
         sb.AppendLine($"  {"set <key> <value>",-30} - Set a configuration value");
         sb.AppendLine($"  {"list",-30} - Show current configuration");
         sb.AppendLine();
@@ -194,5 +195,15 @@ public static class Utils
         catch { /* Ignore IO errors during scan */ }
 
         return existing;
+    }
+
+    public static string FormatBytes(long bytes)
+    {
+        string[] units = { "B", "KB", "MB", "GB", "TB" };
+        if (bytes == 0) return "0 B";
+        int unitIndex = (int)Math.Floor(Math.Log(bytes, 1024));
+        if (unitIndex >= units.Length) unitIndex = units.Length - 1;
+        double size = bytes / Math.Pow(1024, unitIndex);
+        return $"{size:F2} {units[unitIndex]}";
     }
 }

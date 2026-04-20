@@ -24,6 +24,7 @@ internal static class Program
         };
 
 
+
         var app = new TuiApp();
 
         var rootCommand = new RootCommand(Utils.GetRootHelpDescription())
@@ -70,6 +71,17 @@ internal static class Program
         listCommand.SetHandler(app.ListConfiguration);
 
         rootCommand.AddCommand(listCommand);
+        
+        // ── resume Command ──────────────────────────────────────────────────
+        var resumeCommand = new Command("resume", "Resume a download from a .mdebrid file");
+        var pathArg = new Argument<string>("path") { Description = "Path to the .mdebrid file" };
+        resumeCommand.AddArgument(pathArg);
+        resumeCommand.SetHandler(async (path) =>
+        {
+            await app.RunResumeAsync(path, cts.Token);
+        }, pathArg);
+        
+        rootCommand.AddCommand(resumeCommand);
 
         var parser = new CommandLineBuilder(rootCommand)
             .UseDefaults()
