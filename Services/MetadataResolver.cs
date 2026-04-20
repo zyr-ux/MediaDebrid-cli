@@ -65,7 +65,7 @@ public partial class MetadataResolver
         "mono", "stereo",
         "razor1911", "reloaded", "skidrow", "codex", "plaza", "cpy", "empress",
         "flt", "rune", "goldberg", "p2p", "tenoke", "simplex", "darksiders", "tinyiso",
-        "steam", "gog", "cracked", "crack", "update", "patch", "dlc", "bonus"
+        "steam", "gog", "cracked", "crack", "update", "patch", "dlc", "bonus", "supporter"
     };
 
     private static readonly HashSet<string> SoftPhrases = new(StringComparer.OrdinalIgnoreCase)
@@ -92,7 +92,8 @@ public partial class MetadataResolver
         "game of the year edition",
         "goty edition",
         "premium edition",
-        "gold edition"
+        "gold edition",
+        "supporter edition"
     };
 
     [GeneratedRegex(@"^\[REQ\]\s*|^\(REQ\)\s*", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
@@ -880,7 +881,7 @@ public partial class MetadataResolver
             var current = tokens[i].NormalizedText;
 
             // Standalone edition tokens and compounds (e.g., "Digital Deluxe", "Ultimate")
-            if (current is "digital" or "ultimate" or "premium" or "standard" or "complete")
+            if (current is "digital" or "ultimate" or "premium" or "standard" or "complete" or "supporter")
             {
                 // Safety: Avoid catching these as the first word of a title unless followed by strong edition signals
                 bool isFollowedByStrong = (i + 1 < tokens.Count && tokens[i + 1].NormalizedText is "edition" or "deluxe" or "ultimate" or "bundle" or "collection");
@@ -925,7 +926,7 @@ public partial class MetadataResolver
             if (i > 0 && current == "edition")
             {
                  var prev = tokens[i - 1].NormalizedText;
-                 if (prev is "deluxe" or "ultimate" or "standard" or "special" or "collectors" or "anniversary" or "complete" or "goty" or "premium" or "gold" or "definitive" or "legendary" or "enhanced" or "directors" or "masterpiece")
+                 if (prev is "deluxe" or "ultimate" or "standard" or "special" or "collectors" or "anniversary" or "complete" or "goty" or "premium" or "gold" or "definitive" or "legendary" or "enhanced" or "directors" or "masterpiece" or "supporter")
                  {
                      edition = CleanToken(tokens[i - 1].Text) + " " + CleanToken(tokens[i].Text);
                      boundaryIndex = i - 1;
