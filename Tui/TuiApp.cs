@@ -100,7 +100,7 @@ public class TuiApp
         {
             string statusMsg = matched?.Status == "downloading" || matched?.Status == "queued" 
                 ? $"is currently [bold red]{matched.Status}[/]" 
-                : "is [bold red]not cached[/]";
+                : "is [bold red]uncached[/]";
             
             AnsiConsole.MarkupLine($"[red]✗[/] This magnet {statusMsg} on Real-Debrid servers.");
             
@@ -118,11 +118,11 @@ public class TuiApp
         }
         else if (matched != null && !newlyAdded)
         {
-            AnsiConsole.MarkupLine($"[green]✓[/] Found existing torrent. (Status: [cyan]{matched.Status}[/])");
+            AnsiConsole.MarkupLine($"[green]✓[/] Found existing torrent. (Status: [cyan]cached[/])");
         }
         else if (newlyAdded)
         {
-            AnsiConsole.MarkupLine($"[green]✓[/] Magnet added to Real-Debrid. (Status: [cyan]{matched?.Status}[/])");
+            AnsiConsole.MarkupLine($"[green]✓[/] Magnet added to Real-Debrid. (Status: [cyan]cached[/])");
         }
 
         await AnsiConsole.Status()
@@ -223,7 +223,7 @@ public class TuiApp
         info = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken);
         if (info.Status != "downloaded")
         {
-            AnsiConsole.MarkupLine("[red]✗[/] Magnet is [bold red]not cached[/] on Real-Debrid servers.");
+            AnsiConsole.MarkupLine("[red]✗[/] Magnet is [bold red]uncached[/] on Real-Debrid servers.");
             if (!AnsiConsole.Confirm("Do you want to wait for Real-Debrid to cache it?"))
             {
                 await AnsiConsole.Status().StartAsync("[red]Removing magnet...[/]", async ctx => 
