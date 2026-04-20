@@ -467,6 +467,41 @@ public class TuiApp
             grid.AddRow("[bold]Version:[/]", $"[cyan]{Markup.Escape(meta.Version)}[/]");
         }
 
+        if (!string.IsNullOrWhiteSpace(meta.Edition))
+        {
+            grid.AddRow("[bold]Edition:[/]", $"[yellow]{Markup.Escape(meta.Edition)}[/]");
+        }
+
+        if (meta.HasDlc == true)
+        {
+            grid.AddRow("[bold]Has DLC:[/]", "[green]Yes[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.ReleaseGroup))
+        {
+            grid.AddRow("[bold]Group:[/]", $"[cyan]{Markup.Escape(meta.ReleaseGroup)}[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Resolution))
+        {
+            grid.AddRow("[bold]Res:[/]", $"[cyan]{Markup.Escape(meta.Resolution)}[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Quality))
+        {
+            grid.AddRow("[bold]Quality:[/]", $"[cyan]{Markup.Escape(meta.Quality)}[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Codec))
+        {
+            grid.AddRow("[bold]Codec:[/]", $"[cyan]{Markup.Escape(meta.Codec)}[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.InstallerType))
+        {
+            grid.AddRow("[bold]Installer:[/]", $"[cyan]{Markup.Escape(meta.InstallerType)}[/]");
+        }
+
         if (!string.IsNullOrWhiteSpace(meta.Source))
         {
             grid.AddRow("[bold]Source:[/]", $"[dim]{Markup.Escape(meta.Source)}[/]");

@@ -728,7 +728,7 @@ public partial class MetadataResolver
             {
                 bestScore = score;
                 bestIndex = i;
-                bestYear = current;
+                bestYear = CleanToken(tokens[i].Text);
             }
         }
 
@@ -773,8 +773,8 @@ public partial class MetadataResolver
         {
             var current = tokens[i].NormalizedText;
 
-            if (current is "2160p" or "4k" or "uhd") { resolution = "2160p"; boundaryIndex = i; return true; }
-            if (current is "1080p" or "720p" or "480p") { resolution = current; boundaryIndex = i; return true; }
+            if (current is "2160p" or "4k" or "uhd") { resolution = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "1080p" or "720p" or "480p") { resolution = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
         }
         return false;
     }
@@ -789,21 +789,21 @@ public partial class MetadataResolver
             var current = tokens[i].NormalizedText;
             var next = i + 1 < tokens.Count ? tokens[i + 1].NormalizedText : string.Empty;
 
-            if (current == "web" && next == "dl") { quality = "web-dl"; boundaryIndex = i; return true; }
-            if (current == "web" && next == "rip") { quality = "webrip"; boundaryIndex = i; return true; }
-            if (current is "bluray" or "brrip" or "bdrip" or "bdr") { quality = "bluray"; boundaryIndex = i; return true; }
-            if (current is "webrip") { quality = "webrip"; boundaryIndex = i; return true; }
-            if (current is "webdl") { quality = "web-dl"; boundaryIndex = i; return true; }
-            if (current is "hdtv") { quality = "hdtv"; boundaryIndex = i; return true; }
-            if (current is "hdrip") { quality = "hdrip"; boundaryIndex = i; return true; }
-            if (current is "dvd" or "dvdr" or "dvdrip") { quality = "dvd"; boundaryIndex = i; return true; }
-            if (current is "cam") { quality = "cam"; boundaryIndex = i; return true; }
-            if (current is "telesync" or "ts") { quality = "ts"; boundaryIndex = i; return true; }
-            if (current is "tc") { quality = "tc"; boundaryIndex = i; return true; }
-            if (current is "vhsrip") { quality = "vhsrip"; boundaryIndex = i; return true; }
-            if (current is "r5") { quality = "r5"; boundaryIndex = i; return true; }
-            if (current is "workprint") { quality = "workprint"; boundaryIndex = i; return true; }
-            if (current is "remux") { quality = "remux"; boundaryIndex = i; return true; }
+            if (current == "web" && next == "dl") { quality = CleanToken(tokens[i].Text) + "-" + CleanToken(tokens[i+1].Text); boundaryIndex = i; return true; }
+            if (current == "web" && next == "rip") { quality = CleanToken(tokens[i].Text) + CleanToken(tokens[i+1].Text); boundaryIndex = i; return true; }
+            if (current is "bluray" or "brrip" or "bdrip" or "bdr") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "webrip") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "webdl") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "hdtv") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "hdrip") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "dvd" or "dvdr" or "dvdrip") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "cam") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "telesync" or "ts") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "tc") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "vhsrip") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "r5") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "workprint") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
+            if (current is "remux") { quality = CleanToken(tokens[i].Text); boundaryIndex = i; return true; }
         }
         return false;
     }
@@ -851,7 +851,7 @@ public partial class MetadataResolver
 
             if ((current is "build" or "update" or "patch" or "rev") && next.Length > 0 && char.IsDigit(next[0]))
             {
-                version = current + " " + next;
+                version = CleanToken(tokens[i].Text) + " " + CleanToken(tokens[i+1].Text);
                 boundaryIndex = i;
                 return true;
             }
@@ -878,10 +878,36 @@ public partial class MetadataResolver
         for (int i = 0; i < tokens.Count; i++)
         {
             var current = tokens[i].NormalizedText;
+
+            // Standalone edition tokens and compounds (e.g., "Digital Deluxe", "Ultimate")
+            if (current is "digital" or "ultimate" or "premium" or "standard" or "complete")
+            {
+                // Safety: Avoid catching these as the first word of a title unless followed by strong edition signals
+                bool isFollowedByStrong = (i + 1 < tokens.Count && tokens[i + 1].NormalizedText is "edition" or "deluxe" or "ultimate" or "bundle" or "collection");
+                if (i > 0 || isFollowedByStrong)
+                {
+                    edition = CleanToken(tokens[i].Text);
+                    boundaryIndex = i;
+
+                    int lookAhead = i + 1;
+                    if (lookAhead < tokens.Count && tokens[lookAhead].NormalizedText is "deluxe" or "ultimate")
+                    {
+                        edition += " " + CleanToken(tokens[lookAhead].Text);
+                        lookAhead++;
+                    }
+
+                    if (lookAhead < tokens.Count && tokens[lookAhead].NormalizedText is "edition" or "bundle" or "collection")
+                    {
+                        edition += " " + CleanToken(tokens[lookAhead].Text);
+                    }
+
+                    return true;
+                }
+            }
             
             if (current is "collection" or "bundle")
             {
-                 edition = current;
+                 edition = CleanToken(tokens[i].Text);
                  boundaryIndex = i;
                  
                  if (i > 0)
@@ -889,7 +915,7 @@ public partial class MetadataResolver
                      var prev = tokens[i - 1].NormalizedText;
                      if (prev is "complete" or "ultimate" or "masterpiece" or "hd" or "remastered")
                      {
-                         edition = prev + " " + current;
+                         edition = CleanToken(tokens[i - 1].Text) + " " + CleanToken(tokens[i].Text);
                          boundaryIndex = i - 1;
                      }
                  }
@@ -901,12 +927,12 @@ public partial class MetadataResolver
                  var prev = tokens[i - 1].NormalizedText;
                  if (prev is "deluxe" or "ultimate" or "standard" or "special" or "collectors" or "anniversary" or "complete" or "goty" or "premium" or "gold" or "definitive" or "legendary" or "enhanced" or "directors" or "masterpiece")
                  {
-                     edition = prev + " edition";
+                     edition = CleanToken(tokens[i - 1].Text) + " " + CleanToken(tokens[i].Text);
                      boundaryIndex = i - 1;
                      
                      if (i > 1 && prev == "directors" && tokens[i-2].NormalizedText == "cut")
                      {
-                         edition = "director's cut";
+                         edition = CleanToken(tokens[i - 2].Text) + " " + CleanToken(tokens[i - 1].Text) + " " + CleanToken(tokens[i].Text);
                          boundaryIndex = i - 2;
                      }
                      
@@ -915,9 +941,9 @@ public partial class MetadataResolver
             }
             if (current == "goty")
             {
-                 edition = "goty";
+                 edition = CleanToken(tokens[i].Text);
                  boundaryIndex = i;
-                 if (i + 1 < tokens.Count && tokens[i+1].NormalizedText == "edition") edition = "goty edition";
+                 if (i + 1 < tokens.Count && tokens[i+1].NormalizedText == "edition") edition = CleanToken(tokens[i].Text) + " " + CleanToken(tokens[i+1].Text);
                  return true;
             }
         }
@@ -934,17 +960,17 @@ public partial class MetadataResolver
             var txt = tokens[i].NormalizedText;
             if (KnownReleaseGroups.Contains(txt))
             {
-                group = txt;
+                group = CleanToken(tokens[i].Text);
                 boundaryIndex = i;
                 return true;
             }
             
             if (i < tokens.Count - 1)
             {
-                var twoWords = txt + " " + tokens[i+1].NormalizedText;
-                if (KnownReleaseGroups.Contains(twoWords))
+                var normalizedTwo = txt + " " + tokens[i+1].NormalizedText;
+                if (KnownReleaseGroups.Contains(normalizedTwo))
                 {
-                    group = twoWords;
+                    group = CleanToken(tokens[i].Text) + " " + CleanToken(tokens[i+1].Text);
                     boundaryIndex = i;
                     return true;
                 }
@@ -958,7 +984,7 @@ public partial class MetadataResolver
         boundaryIndex = -1;
         for (int i = 0; i < tokens.Count; i++)
         {
-             if (tokens[i].NormalizedText is "dlc" or "bonus" or "ost" or "soundtrack" or "expansion")
+             if (tokens[i].NormalizedText is "dlc" or "dlcs" or "bonus" or "bonuses" or "ost" or "soundtrack" or "expansion")
              {
                  boundaryIndex = i; return true;
              }
@@ -976,7 +1002,7 @@ public partial class MetadataResolver
             var current = tokens[i].NormalizedText;
             if (current is "portable" or "setup" or "crack" or "installer" or "keygen" or "activator" or "retail")
             {
-                installer = current;
+                installer = CleanToken(tokens[i].Text);
                 boundaryIndex = i;
                 return true;
             }
