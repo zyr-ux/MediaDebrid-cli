@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MediaDebrid_cli.Models;
@@ -76,4 +77,5 @@ public class RealDebridErrorResponse
     [JsonPropertyName("error_code")]
     public int ErrorCode { get; set; }
 }
+
 

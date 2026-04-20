@@ -83,6 +83,15 @@ public class RealDebridClient
         return await HandleResponseAsync<UnrestrictResponse>(res, cancellationToken);
     }
 
+    public async Task DeleteTorrentAsync(string torrentId, CancellationToken cancellationToken = default)
+    {
+        var res = await _client.DeleteAsync($"{BaseUrl}/torrents/delete/{torrentId}", cancellationToken);
+        if (res.StatusCode != System.Net.HttpStatusCode.NoContent)
+        {
+            await HandleResponseAsync<object>(res, cancellationToken);
+        }
+    }
+
     public async Task<TorrentInfo> WaitForStatusAsync(string torrentId, string[] targetStatuses, CancellationToken cancellationToken, int pollDelayMs = 2000)
     {
         while (!cancellationToken.IsCancellationRequested)

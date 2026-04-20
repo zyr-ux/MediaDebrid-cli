@@ -56,10 +56,73 @@ public class TuiApp
         MediaMetadata? resolved = null;
         HashSet<int>? existingEpisodes = null;
 
-        if (MagnetParser.ExtractHash(magnet) == null)
+        var hash = MagnetParser.ExtractHash(magnet);
+        if (string.IsNullOrEmpty(hash))
         {
             AnsiConsole.MarkupLine("[red]Error:[/] [white]Invalid magnet link: Missing BTIH hash (xt=urn:btih:).[/]");
             return;
+        }
+
+        TorrentItem? matched = null;
+        bool isCached = false;
+        bool newlyAdded = false;
+
+        await AnsiConsole.Status()
+            .StartAsync("Checking Real-Debrid cache...", async ctx =>
+            {
+                ctx.Spinner(Spinner.Known.Dots);
+                ctx.SpinnerStyle(Style.Parse("yellow"));
+
+                matched = await GetClient().FindTorrentByHashAsync(hash, cancellationToken);
+                
+                if (matched == null)
+                {
+                    ctx.Status("[yellow]Adding magnet to check cache status...[/]");
+                    var addRes = await GetClient().AddMagnetAsync(magnet, cancellationToken);
+                    torrentId = addRes.Id;
+                    newlyAdded = true;
+                    
+                    // Fetch fresh info to get status
+                    var info = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken);
+                    isCached = info.Status == "downloaded" || info.Status == "waiting_files_selection";
+                    
+                    // Update matched with enough info for the prompt if needed
+                    matched = new TorrentItem { Id = torrentId, Status = info.Status, Hash = hash };
+                }
+                else
+                {
+                    torrentId = matched.Id;
+                    isCached = matched.Status == "downloaded" || matched.Status == "waiting_files_selection";
+                }
+            });
+
+        if (!isCached)
+        {
+            string statusMsg = matched?.Status == "downloading" || matched?.Status == "queued" 
+                ? $"is currently [bold red]{matched.Status}[/]" 
+                : "is [bold red]not cached[/]";
+            
+            AnsiConsole.MarkupLine($"[red]✗[/] This magnet {statusMsg} on Real-Debrid servers.");
+            
+            if (!AnsiConsole.Confirm("Do you want Real-Debrid to cache it for you?"))
+            {
+                if (newlyAdded && !string.IsNullOrEmpty(torrentId))
+                {
+                    await AnsiConsole.Status().StartAsync("[red]Removing magnet...[/]", async ctx => 
+                    {
+                        await GetClient().DeleteTorrentAsync(torrentId, cancellationToken);
+                    });
+                }
+                throw new TerminationException("[red]Caching declined by user. Magnet removed from Real-Debrid account.[/]");
+            }
+        }
+        else if (matched != null && !newlyAdded)
+        {
+            AnsiConsole.MarkupLine($"[green]✓[/] Found existing torrent. (Status: [cyan]{matched.Status}[/])");
+        }
+        else if (newlyAdded)
+        {
+            AnsiConsole.MarkupLine($"[green]✓[/] Magnet added to Real-Debrid. (Status: [cyan]{matched?.Status}[/])");
         }
 
         await AnsiConsole.Status()
@@ -80,19 +143,6 @@ public class TuiApp
                         ApplyOverrides(resolved);
                         resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, resolved.Season);
                         RenderMetadataPanel(resolved);
-                    }
-
-                    var hash = MagnetParser.ExtractHash(magnet);
-                    if (!string.IsNullOrEmpty(hash))
-                    {
-                        ctx.Status($"[yellow]Checking for existing torrent with hash {hash}...[/]");
-                        var matched = await GetClient().FindTorrentByHashAsync(hash, cancellationToken);
-
-                        if (matched != null)
-                        {
-                            torrentId = matched.Id;
-                            AnsiConsole.MarkupLine($"[green]✓[/] Found existing torrent. Reusing RD ID: [cyan]{torrentId}[/]");
-                        }
                     }
 
                     if (string.IsNullOrEmpty(torrentId))
@@ -120,8 +170,7 @@ public class TuiApp
 
                     if (info.Status == "dead")
                     {
-                        AnsiConsole.MarkupLine("[red]✗[/] Torrent is dead.");
-                        return;
+                        throw new TerminationException("[red]✗[/] Torrent is dead.");
                     }
 
                     if (resolved.Type == "show" && Settings.Instance.SkipExistingEpisodes)
@@ -148,35 +197,55 @@ public class TuiApp
                         
                         if (!fileIds.Any())
                         {
-                            AnsiConsole.MarkupLine("[red]✗[/] No files found to download.");
-                            return;
+                            throw new TerminationException("[red]✗[/] No files found to download.");
                         }
 
                         if (episodeOverride.HasValue && !info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, episodeOverride.Value)))
                         {
-                            AnsiConsole.MarkupLine($"[yellow]⚠[/] No files found matching episode [cyan]{episodeOverride.Value}[/]. Falling back to largest files.");
+                            AnsiConsole.MarkupLine($"[red]✗[/] No files found matching episode [cyan]{episodeOverride.Value}[/]. Falling back to largest files.");
                         }
 
                         await GetClient().SelectFilesAsync(torrentId, string.Join(",", fileIds), cancellationToken: cancellationToken);
                         AnsiConsole.MarkupLine("[green]✓[/] Selected relevant files.");
-
-                        ctx.Status("[yellow]Waiting for Real-Debrid to cache files...[/]");
-                        info = await GetClient().WaitForStatusAsync(torrentId, new[] { "downloaded" }, cancellationToken, pollDelayMs: 5000);
                     }
-
-                    AnsiConsole.MarkupLine("[green]✓[/] Files are ready and cached!");
                 }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
+                catch (TerminationException) { throw; }
+                catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
                     AnsiConsole.MarkupLine($"[red]Error during initialization:[/] [white]{Markup.Escape(ex.Message)}[/]");
                 }
             });
 
-        if (info == null || resolved == null || info.Status == "dead") return;
+        if (info == null || resolved == null) return;
+
+        // Definitive cache check: After selection, status MUST be 'downloaded' if it was cached.
+        info = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken);
+        if (info.Status != "downloaded")
+        {
+            AnsiConsole.MarkupLine("[red]✗[/] Magnet is [bold red]not cached[/] on Real-Debrid servers.");
+            if (!AnsiConsole.Confirm("Do you want to wait for Real-Debrid to cache it?"))
+            {
+                await AnsiConsole.Status().StartAsync("[red]Removing magnet...[/]", async ctx => 
+                {
+                    await GetClient().DeleteTorrentAsync(torrentId, cancellationToken);
+                });
+                throw new TerminationException("[red]Caching declined by user. Magnet removed from Real-Debrid account.[/]");
+            }
+        }
+
+        if (info.Status != "downloaded")
+        {
+            await AnsiConsole.Status()
+                .StartAsync("Waiting for Real-Debrid to cache files...", async ctx =>
+                {
+                    ctx.Spinner(Spinner.Known.Dots);
+                    ctx.SpinnerStyle(Style.Parse("yellow"));
+                    info = await GetClient().WaitForStatusAsync(torrentId, ["downloaded"], cancellationToken, pollDelayMs: 5000);
+                });
+        }
+
+        AnsiConsole.MarkupLine("[green]✓[/] Files are ready and cached!");
 
         AnsiConsole.MarkupLine("\n[bold]Starting Downloads...[/]");
 
