@@ -949,6 +949,8 @@ public class TuiApp
 
         foreach (var task in _progressTasks.Values)
         {
+            if (task.IsFinished) continue;
+
             var current = task.Description;
             if (isPaused && !current.StartsWith("[yellow]PAUSED[/]"))
             {
