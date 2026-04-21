@@ -50,10 +50,6 @@ dotnet run -- [commands]
     ```bash
     mediadebrid-cli
     ```
-*   **Add a Magnet Link**
-    ```bash
-    mediadebrid-cli add "magnet:?xt=urn:btih:..."
-    ```
 *   **Resume a Download**
     ```bash
     mediadebrid-cli resume "/path/to/partially_downloaded_file.mdebrid"
