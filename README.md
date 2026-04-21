@@ -10,12 +10,12 @@ It features a stunning Terminal User Interface (TUI) powered by Spectre.Console,
 
 - **Real-Debrid Integration**: Seamlessly adds magnet links, selects appropriate files, un-restricts links, and fetches direct download URLs.
 - **Rich Terminal UI**: Beautiful, responsive console interface with live progress bars, spinners, and colored logs.
+- **Typewriter Effect**: Smooth, animated input prompts with custom manual wrap-around handling to prevent cursor trapping.
 - **Segmented / Parallel Downloads**: Splits files into multiple chunks and downloads them concurrently for maximum throughput.
-- **Robust Resumable Downloads**: Persists download state natively within the file itself, allowing downloads to survive application crashes, manual cancellations, or network drops.
-- **Smart Categorization**: Automatically generates clean file paths and routes downloads to appropriate directories based on media type (Movies/Shows, Games, Others).
+- **Robust Resumable Downloads**: Persists download state natively within a 4KB binary footer in the file itself.
+- **Heuristic Metadata Resolution**: Advanced signal-based parsing to automatically categorize content as Movies, TV Shows, Games, or Software.
 - **Interactive Mode**: Launch the app without arguments to enter an intuitive, guided TUI mode.
-- **Pause/Cancel Support**: Gracefully pause or safely cancel downloads with keyboard shortcuts (`p` to pause, `Ctrl+C` or `x` to cancel/exit) while preserving progress.
-
+- **Pause/Cancel Support**: Gracefully pause or safely cancel downloads with keyboard shortcuts (`p` to pause, `x` to save & exit).
 ---
 
 ## 🚀 Prerequisites
@@ -127,6 +127,10 @@ The JSON payload contains critical state information:
 
 ---
 
-## 👨‍💻 Contributing
+## 👨‍💻 Contributing & Technical Info
 
-When contributing to this repository, please review the `AGENTS.md` guidelines for core architectural rules, specifically regarding handling the Spectre.Console TUI, centralized exception handling (`Models/Exceptions.cs`), and correct asynchronous patterns.
+For detailed information on the internal systems, please refer to our technical guides:
+- [Technical Architecture Guide](docs/ARCHITECTURE.md): Deep dive into the TUI system, Download Engine, and Heuristic Resolution.
+- [Agent Guidelines](AGENTS.md): Coding standards and architectural rules for AI and human contributors.
+
+When contributing to this repository, please follow the established patterns for centralized exception handling (`Models/Exceptions.cs`) and the Spectre.Console TUI management.
