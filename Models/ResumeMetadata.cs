@@ -7,6 +7,7 @@ public class ResumeMetadata
     public long TotalSize { get; set; }
     public List<SegmentProgress> Segments { get; set; } = new();
     public string? TypeOverride { get; set; }
+    public int? SeasonOverride { get; set; }
     public int? EpisodeOverride { get; set; }
 }
 

@@ -20,15 +20,21 @@ public static class Utils
         if (meta.Season == null && meta.Type == "show") meta.Season = 1;
     }
 
-    public static string[] GetSelectedFiles(List<TorrentFile> files, int? episodeOverride, HashSet<int>? existingEpisodes = null)
+    public static string[] GetSelectedFiles(List<TorrentFile> files, int? seasonOverride, int? episodeOverride, HashSet<int>? existingEpisodes = null)
     {
         var fileIds = files
             .Where(f =>
             {
                 if (f.Bytes < 50_000_000 && !episodeOverride.HasValue) return false;
+                
+                if (seasonOverride.HasValue && !IsSeasonMatch(f.Path, seasonOverride.Value))
+                {
+                    return false;
+                }
+
                 if (episodeOverride.HasValue)
                 {
-                    return IsEpisodeMatch(f.Path, episodeOverride.Value);
+                    return IsEpisodeMatch(f.Path, episodeOverride.Value, seasonOverride);
                 }
                 
                 if (existingEpisodes != null && Settings.Instance.SkipExistingEpisodes)
@@ -144,8 +150,10 @@ public static class Utils
         return sb.ToString();
     }
 
-    public static bool IsEpisodeMatch(string path, int episodeNumber)
+    public static bool IsEpisodeMatch(string path, int episodeNumber, int? seasonNumber = null)
     {
+        if (seasonNumber.HasValue && !IsSeasonMatch(path, seasonNumber.Value)) return false;
+
         // Try to match episode number in path (e.g., E05, Episode 5, x05)
         var epPattern = $@"(?i)(?:E|Episode\s*|x)(0*{episodeNumber})\b";
         if (Regex.IsMatch(path, epPattern)) return true;
@@ -170,6 +178,24 @@ public static class Utils
         if (match.Success && int.TryParse(match.Groups[1].Value, out int fallbackEp)) return fallbackEp;
 
         return null;
+    }
+
+    public static int? ExtractSeasonNumber(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return null;
+        
+        // Try to match season number (e.g., S01, Season 1)
+        var sPattern = @"(?i)(?:S|Season\s*)0*(\d+)\b";
+        var match = Regex.Match(input, sPattern);
+        if (match.Success && int.TryParse(match.Groups[1].Value, out int s)) return s;
+
+        return null;
+    }
+
+    public static bool IsSeasonMatch(string path, int seasonNumber)
+    {
+        var sPattern = $@"(?i)(?:S|Season\s*)0*{seasonNumber}\b";
+        return Regex.IsMatch(path, sPattern);
     }
 
     private static readonly string[] VideoExtensions = { ".mkv", ".mp4", ".avi", ".m4v", ".mov", ".ts", ".wmv" };

@@ -211,6 +211,48 @@ public class TuiApp
             throw new TerminationException("[bold red]X[/] Torrent is dead.");
         }
 
+        // Interactive season selection for multi-season shows
+        if (resolved.Type == "show" && !seasonOverride.HasValue)
+        {
+            var seasonsInTorrent = info.Files
+                .Select(f => Utils.ExtractSeasonNumber(f.Path))
+                .Where(s => s.HasValue)
+                .Select(s => s!.Value)
+                .Distinct()
+                .OrderBy(s => s)
+                .ToList();
+
+            if (seasonsInTorrent.Count > 1)
+            {
+                try
+                {
+                    var sPrompt = new TextPrompt<string>($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number[/] to download (leave empty for all):")
+                        .AllowEmpty()
+                        .Validate(input =>
+                        {
+                            if (string.IsNullOrWhiteSpace(input)) return ValidationResult.Success();
+                            if (!int.TryParse(input, out var sNum) || sNum <= 0) return ValidationResult.Error("[red]Please enter a valid season number.[/]");
+                            if (!seasonsInTorrent.Contains(sNum)) return ValidationResult.Error($"[red]Season {sNum} not found in this torrent.[/]");
+                            return ValidationResult.Success();
+                        });
+
+                    var input = await CancellablePromptAsync(sPrompt, cancellationToken);
+                    if (!string.IsNullOrWhiteSpace(input) && int.TryParse(input, out var chosenSeason))
+                    {
+                        seasonOverride = chosenSeason;
+                        resolved.Season = chosenSeason;
+                        resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, resolved.Season);
+                        AnsiConsole.MarkupLine($"[bold green]✓[/] Selected season [cyan]S{chosenSeason:D2}[/].");
+                        RenderMetadataPanel(resolved);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw new TerminationException("\n[red]Application terminated. Exiting...[/]");
+                }
+            }
+        }
+
         // Interactive episode selection for shows
         if (resolved.Type == "show" && !episodeOverride.HasValue)
         {
@@ -222,7 +264,11 @@ public class TuiApp
                     {
                         if (string.IsNullOrWhiteSpace(input)) return ValidationResult.Success();
                         if (!int.TryParse(input, out var epNum) || epNum <= 0) return ValidationResult.Error("[red]Please enter a valid episode number.[/]");
-                        if (!info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, epNum))) return ValidationResult.Error($"[red]Episode {epNum} not found in this torrent.[/]");
+                        if (!info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, epNum, seasonOverride))) 
+                        {
+                             var scope = seasonOverride.HasValue ? $"in season {seasonOverride}" : "in this torrent";
+                             return ValidationResult.Error($"[red]Episode {epNum} not found {scope}.[/]");
+                        }
                         return ValidationResult.Success();
                     });
 
@@ -267,7 +313,7 @@ public class TuiApp
                     if (info.Status == "waiting_files_selection")
                     {
                         ctx.Status("[yellow]Selecting files...[/]");
-                        var fileIds = Utils.GetSelectedFiles(info.Files, episodeOverride, existingEpisodes);
+                        var fileIds = Utils.GetSelectedFiles(info.Files, seasonOverride, episodeOverride, existingEpisodes);
                         if (!fileIds.Any() && info.Files.Any()) fileIds = new[] { info.Files.First().Id.ToString() };
                         
                         if (!fileIds.Any())
@@ -275,9 +321,9 @@ public class TuiApp
                             throw new TerminationException("[bold red]X[/] No files found to download.");
                         }
 
-                        if (episodeOverride.HasValue && !info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, episodeOverride.Value)))
+                        if (episodeOverride.HasValue && !info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, episodeOverride.Value, seasonOverride)))
                         {
-                            AnsiConsole.MarkupLine($"[bold red]X[/] No files found matching episode [cyan]{episodeOverride.Value}[/]. Falling back to largest files.");
+                            AnsiConsole.MarkupLine($"[bold red]X[/] No files found matching episode [cyan]{episodeOverride.Value}[/] in selected season. Falling back to largest files.");
                         }
 
                         await GetClient().SelectFilesAsync(torrentId, string.Join(",", fileIds), cancellationToken: cancellationToken);
@@ -468,6 +514,7 @@ public class TuiApp
                                         FileId = unrestricted.Id,
                                         TotalSize = 0, // Will be set by downloader
                                         TypeOverride = typeOverride,
+                                        SeasonOverride = seasonOverride,
                                         EpisodeOverride = episodeOverride
                                     };
                                 }
@@ -673,7 +720,7 @@ public class TuiApp
             return;
         }
 
-        await RunAsync(metadata.MagnetUri, metadata.TypeOverride, null, null, null, metadata.EpisodeOverride, showLogo: true, cancellationToken, forceResume: true);
+        await RunAsync(metadata.MagnetUri, metadata.TypeOverride, null, null, metadata.SeasonOverride, metadata.EpisodeOverride, showLogo: true, cancellationToken, forceResume: true);
     }
 
     public async Task EnsureConfiguredAsync(CancellationToken cancellationToken)
