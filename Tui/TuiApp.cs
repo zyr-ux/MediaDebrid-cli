@@ -226,18 +226,27 @@ public class TuiApp
             {
                 try
                 {
-                    var sPrompt = new TextPrompt<string>($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number[/] to download (leave empty for all):")
-                        .AllowEmpty()
-                        .Validate(input =>
-                        {
-                            if (string.IsNullOrWhiteSpace(input)) return ValidationResult.Success();
-                            if (!int.TryParse(input, out var sNum) || sNum <= 0) return ValidationResult.Error("[red]Please enter a valid season number.[/]");
-                            if (!seasonsInTorrent.Contains(sNum)) return ValidationResult.Error($"[red]Season {sNum} not found in this torrent.[/]");
-                            return ValidationResult.Success();
-                        });
+                    string? input = null;
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        input = await ReadLineWithEffectAsync($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number[/] to download (leave empty for all)", cancellationToken);
+                        
+                        if (cancellationToken.IsCancellationRequested) break;
+                        if (string.IsNullOrWhiteSpace(input)) break;
 
-                    var input = await CancellablePromptAsync(sPrompt, cancellationToken);
-                    AnsiConsole.WriteLine();
+                        if (!int.TryParse(input, out var sNum) || sNum <= 0)
+                        {
+                            AnsiConsole.MarkupLine("[red]Please enter a valid season number.[/]");
+                            continue;
+                        }
+                        if (!seasonsInTorrent.Contains(sNum))
+                        {
+                            AnsiConsole.MarkupLine($"[red]Season {sNum} not found in this torrent.[/]");
+                            continue;
+                        }
+                        break;
+                    }
+
                     if (!string.IsNullOrWhiteSpace(input) && int.TryParse(input, out var chosenSeason))
                     {
                         seasonOverride = chosenSeason;
@@ -259,22 +268,28 @@ public class TuiApp
         {
             try
             {
-                var epPrompt = new TextPrompt<string>("Enter [green]episode number[/] to download (leave empty for all):")
-                    .AllowEmpty()
-                    .Validate(input =>
-                    {
-                        if (string.IsNullOrWhiteSpace(input)) return ValidationResult.Success();
-                        if (!int.TryParse(input, out var epNum) || epNum <= 0) return ValidationResult.Error("[red]Please enter a valid episode number.[/]");
-                        if (!info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, epNum, seasonOverride))) 
-                        {
-                             var scope = seasonOverride.HasValue ? $"in season {seasonOverride}" : "in this torrent";
-                             return ValidationResult.Error($"[red]Episode {epNum} not found {scope}.[/]");
-                        }
-                        return ValidationResult.Success();
-                    });
+                string? input = null;
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    input = await ReadLineWithEffectAsync("Enter [green]episode number[/] to download (leave empty for all)", cancellationToken);
+                    
+                    if (cancellationToken.IsCancellationRequested) break;
+                    if (string.IsNullOrWhiteSpace(input)) break;
 
-                var input = await CancellablePromptAsync(epPrompt, cancellationToken);
-                AnsiConsole.WriteLine();
+                    if (!int.TryParse(input, out var epNum) || epNum <= 0)
+                    {
+                        AnsiConsole.MarkupLine("[red]Please enter a valid episode number.[/]");
+                        continue;
+                    }
+                    if (!info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, epNum, seasonOverride)))
+                    {
+                        var scope = seasonOverride.HasValue ? $"in season {seasonOverride}" : "in this torrent";
+                        AnsiConsole.MarkupLine($"[red]Episode {epNum} not found {scope}.[/]");
+                        continue;
+                    }
+                    break;
+                }
+
                 if (!string.IsNullOrWhiteSpace(input) && int.TryParse(input, out var chosenEp))
                 {
                     episodeOverride = chosenEp;
@@ -690,28 +705,34 @@ public class TuiApp
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            string? magnet;
-            try
+            string? magnet = null;
+            
+            while (!cancellationToken.IsCancellationRequested)
             {
-                magnet = await CancellablePromptAsync(
-                    new TextPrompt<string>("Enter [green]Magnet Link[/]:")
-                        .PromptStyle("green")
-                        .Validate(k =>
-                        {
-                            if (string.IsNullOrWhiteSpace(k)) return ValidationResult.Error("[red]Magnet link cannot be empty.[/]");
-                            if (!k.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase)) return ValidationResult.Error("[red]Invalid magnet link format.[/]");
-                            if (MagnetParser.ExtractHash(k) == null) return ValidationResult.Error("[red]Invalid magnet link: Missing BTIH hash (xt=urn:btih:).[/]");
-                            return ValidationResult.Success();
-                        }),
-                    cancellationToken
-                );
+                magnet = await ReadLineWithEffectAsync("Enter [green]Magnet Link[/]: ", cancellationToken, ConsoleColor.Green);
 
-            }
-            catch (OperationCanceledException)
-            {
-                var ex = new TerminationException("[red]Application terminated. Exiting...[/]");
-                ex.Print();
-                throw ex;
+                if (cancellationToken.IsCancellationRequested) break;
+
+                // Validation logic (mirrors the previous TextPrompt validators)
+                if (string.IsNullOrWhiteSpace(magnet))
+                {
+                    AnsiConsole.MarkupLine("[red]Magnet link cannot be empty.[/]");
+                    continue;
+                }
+
+                if (!magnet.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase))
+                {
+                    AnsiConsole.MarkupLine("[red]Invalid magnet link format.[/]");
+                    continue;
+                }
+
+                if (MagnetParser.ExtractHash(magnet) == null)
+                {
+                    AnsiConsole.MarkupLine("[red]Invalid magnet link: Missing BTIH hash (xt=urn:btih:).[/]");
+                    continue;
+                }
+
+                break;
             }
 
             if (magnet is null || cancellationToken.IsCancellationRequested) break;
@@ -754,26 +775,26 @@ public class TuiApp
         {
             if (string.IsNullOrWhiteSpace(Settings.Instance.RealDebridApiToken))
             {
-                Settings.Instance.RealDebridApiToken = await CancellablePromptAsync(
-                    new TextPrompt<string>("Enter [green]Real-Debrid API Key[/]:")
-                        .PromptStyle("white")
-                        .Secret()
-                        .Validate(k => string.IsNullOrWhiteSpace(k) ? ValidationResult.Error("[red]Key cannot be empty.[/]") : ValidationResult.Success()),
-                    cancellationToken
-                );
-                AnsiConsole.WriteLine();
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var token = await ReadLineWithEffectAsync("Enter [green]Real-Debrid API Key[/]", cancellationToken, secret: true);
+                    if (cancellationToken.IsCancellationRequested) break;
+                    
+                    if (string.IsNullOrWhiteSpace(token))
+                    {
+                        AnsiConsole.MarkupLine("[red]Key cannot be empty.[/]");
+                        continue;
+                    }
+                    Settings.Instance.RealDebridApiToken = token;
+                    break;
+                }
             }
 
             if (string.IsNullOrWhiteSpace(Settings.Instance.MediaRoot))
             {
                 var defaultPath = Settings.DefaultBaseRoot;
-                Settings.Instance.MediaRoot = await CancellablePromptAsync(
-                    new TextPrompt<string>("Enter [green]Movies/Shows Root Path[/]:")
-                        .DefaultValue(defaultPath)
-                        .PromptStyle("white"),
-                    cancellationToken
-                );
-                AnsiConsole.WriteLine();
+                var root = await ReadLineWithEffectAsync("Enter [green]Movies/Shows Root Path[/]", cancellationToken, defaultValue: defaultPath);
+                if (root != null) Settings.Instance.MediaRoot = root;
             }
         }
         catch (OperationCanceledException)
@@ -817,6 +838,81 @@ public class TuiApp
         var json = Utils.GetSettingsJson();
         AnsiConsole.MarkupLine("[cyan]Current Configuration:[/]");
         Console.WriteLine(json);
+    }
+
+    private async Task<string?> ReadLineWithEffectAsync(string prompt, CancellationToken ct, ConsoleColor color = ConsoleColor.White, int batchSize = 5, bool secret = false, string? defaultValue = null)
+    {
+        var displayPrompt = prompt.Trim();
+        if (!string.IsNullOrEmpty(defaultValue))
+        {
+            displayPrompt = $"{displayPrompt} [blue]({defaultValue})[/]";
+        }
+        
+        if (!displayPrompt.EndsWith(":")) displayPrompt += ":";
+        AnsiConsole.Markup(displayPrompt + " ");
+        
+        var sb = new System.Text.StringBuilder();
+
+        while (!ct.IsCancellationRequested)
+        {
+            if (Console.KeyAvailable)
+            {
+                var key = Console.ReadKey(intercept: true);
+
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    AnsiConsole.WriteLine();
+                    var result = sb.ToString().Trim();
+                    return string.IsNullOrEmpty(result) ? defaultValue : result;
+                }
+
+                if (key.Key == ConsoleKey.Backspace)
+                {
+                    if (sb.Length > 0)
+                    {
+                        sb.Remove(sb.Length - 1, 1);
+                        
+                        // Handle manual wrap-around for backspace at the left edge
+                        if (Console.CursorLeft == 0)
+                        {
+                            if (Console.CursorTop > 0)
+                            {
+                                // Move to end of previous line
+                                Console.SetCursorPosition(Console.WindowWidth - 1, Console.CursorTop - 1);
+                                Console.Write(" ");
+                                Console.SetCursorPosition(Console.WindowWidth - 1, Console.CursorTop);
+                            }
+                        }
+                        else
+                        {
+                            // Standard backspace within the same line
+                            Console.Write("\b \b");
+                        }
+                    }
+                }
+                else if (!char.IsControl(key.KeyChar))
+                {
+                    sb.Append(key.KeyChar);
+                    
+                    Console.ForegroundColor = color;
+                    Console.Write(secret ? "*" : key.KeyChar);
+                    Console.ResetColor();
+
+                    if (Console.KeyAvailable && sb.Length % batchSize == 0)
+                    {
+                        // Batch delay to keep the speed high but the "filling in" effect visible
+                        await Task.Delay(1, ct);
+                    }
+                }
+            }
+            else
+            {
+                // Yield to keep UI responsive and avoid CPU pinning
+                await Task.Delay(5, ct);
+            }
+        }
+
+        return null;
     }
 
     private async Task<T> CancellablePromptAsync<T>(IPrompt<T> prompt, CancellationToken cancellationToken)
@@ -863,12 +959,12 @@ public class TuiApp
 
         if (meta.Season.HasValue)
         {
-            AddGridRow("Season", $"[cyan]{meta.Season.Value}[/]");
+            AddGridRow("Season", $"[orange1]{meta.Season.Value}[/]");
         }
 
         if (meta.Episode.HasValue)
         {
-            AddGridRow("Episode", $"[cyan]{meta.Episode.Value}[/]");
+            AddGridRow("Episode", $"[orange1]{meta.Episode.Value}[/]");
         }
 
         if (!string.IsNullOrWhiteSpace(meta.Version))
@@ -1112,7 +1208,7 @@ public class TuiApp
         {
             if (_episodeTexts.TryGetValue(task.Id, out var epText))
             {
-                return new Markup($"[cyan]{Markup.Escape(epText)}[/] ");
+                return new Markup($"[orange1]{Markup.Escape(epText)}[/] ");
             }
             return Text.Empty;
         }
