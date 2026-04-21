@@ -625,13 +625,14 @@ public class TuiApp
                     
                     if (downloadLoopTask != null) await downloadLoopTask;
 
-                    if (!linkedCts.IsCancellationRequested)
-                    {
-                        AnsiConsole.WriteLine();
-                        AnsiConsole.MarkupLine("[bold green]All downloads completed![/]");
-                        shouldDeletePartial = false;
-                    }
                 });
+
+            if (!linkedCts.IsCancellationRequested)
+            {
+                AnsiConsole.WriteLine();
+                AnsiConsole.MarkupLine("[bold green]All downloads completed![/]");
+                shouldDeletePartial = false;
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (MagnetException) { throw; }
