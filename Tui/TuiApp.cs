@@ -136,7 +136,6 @@ public class TuiApp
                 }
                 throw new TerminationException("[red]Caching declined by user. Magnet removed from Real-Debrid account.[/]");
             }
-            AnsiConsole.WriteLine();
         }
         else if (matched != null && !newlyAdded)
         {
@@ -382,7 +381,7 @@ public class TuiApp
         AnsiConsole.MarkupLine("[bold]Starting Downloads...[/]");
         AnsiConsole.MarkupLine("[dim]Controls: [yellow]P[/] Pause | [green]X[/] Save & Exit | [red]Ctrl+C[/] Cancel & Delete[/]");
         AnsiConsole.WriteLine();
-        AnsiConsole.WriteLine();
+
 
         var activePaths = new ConcurrentBag<string>();
         Task? downloadLoopTask = null;
@@ -434,11 +433,13 @@ public class TuiApp
         });
 
         // Now ask for confirmations for any detected resumes
+        bool showedResumes = false;
         for (int i = 0; i < queuedDownloads.Count; i++)
         {
             var item = queuedDownloads[i];
             if (item.ResumeData != null)
             {
+                showedResumes = true;
                 if (forceResume || AnsiConsole.Confirm($"[yellow]Partial download found for {Markup.Escape(item.Unrestricted.Filename)} ({Utils.FormatBytes(item.ResumeData.Segments.Sum(s => s.Current - s.Start))} / {Utils.FormatBytes(item.ResumeData.TotalSize)}). Resume?[/]"))
                 {
                     // Keep it
@@ -448,9 +449,9 @@ public class TuiApp
                     File.Delete(item.DestPath + ".mdebrid");
                     queuedDownloads[i] = (item.Unrestricted, null, item.DestPath);
                 }
-                AnsiConsole.WriteLine();
             }
         }
+        if (showedResumes) AnsiConsole.WriteLine();
 
         try
         {
@@ -654,14 +655,12 @@ public class TuiApp
             if (shouldDeletePartial)
             {
                 AnsiConsole.WriteLine();
-                AnsiConsole.WriteLine();
                 AnsiConsole.MarkupLine("[red]Download cancelled. Cleaning up partial files...[/]");
                 var cleanupRoot = resolved != null ? Settings.GetRootPathForType(resolved.Type) : null;
                 Downloader.CleanupFiles(activePaths, cleanupRoot, force: true);
             }
             else if (linkedCts.IsCancellationRequested)
             {
-                AnsiConsole.WriteLine();
                 AnsiConsole.WriteLine();
                 AnsiConsole.MarkupLine("[yellow]Stopping... Partial progress preserved for resume.[/]");
                 var cleanupRoot = resolved != null ? Settings.GetRootPathForType(resolved.Type) : null;
@@ -706,7 +705,7 @@ public class TuiApp
                         }),
                     cancellationToken
                 );
-                AnsiConsole.WriteLine();
+
             }
             catch (OperationCanceledException)
             {
@@ -747,10 +746,8 @@ public class TuiApp
         cancellationToken.ThrowIfCancellationRequested();
 
         AnsiConsole.WriteLine();
-        AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[yellow]Initial Setup Required[/]");
         AnsiConsole.MarkupLine("Please provide the following required configuration values:");
-        AnsiConsole.WriteLine();
         AnsiConsole.WriteLine();
 
         try

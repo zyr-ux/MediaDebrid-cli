@@ -22,16 +22,22 @@ public class TerminationException : OperationCanceledException, IPrintableExcept
     {
         if (_wasPrinted) return;
 
+        // Skip newline for empty custom messages (silent exit)
+        if (_customMessage != null && string.IsNullOrEmpty(_customMessage))
+        {
+            _wasPrinted = true;
+            return;
+        }
+
+        AnsiConsole.WriteLine();
+
         if (_customMessage != null)
         {
-            if (!string.IsNullOrEmpty(_customMessage))
-            {
-                AnsiConsole.MarkupLine(_customMessage);
-            }
+            AnsiConsole.MarkupLine(_customMessage);
         }
         else
         {
-            AnsiConsole.MarkupLine("\n[red]Operation cancelled. Exiting...[/]");
+            AnsiConsole.MarkupLine("[red]Operation cancelled. Exiting...[/]");
         }
 
         _wasPrinted = true;
@@ -52,9 +58,10 @@ public class RealDebridApiException : HttpRequestException, IPrintableException
 
     public void Print()
     {
+        AnsiConsole.WriteLine();
         string msg = ErrorCode == 35 
-            ? "\n[bold red]X[/] Real-Debrid has blocked this magnet as an infringing file (Code 35)."
-            : $"\n[bold red]X[/] Real-Debrid API Error: [white]{Markup.Escape(Error)}[/] (Code: {ErrorCode})";
+            ? "[bold red]X[/] Real-Debrid has blocked this magnet as an infringing file (Code 35)."
+            : $"[bold red]X[/] Real-Debrid API Error: [white]{Markup.Escape(Error)}[/] (Code: {ErrorCode})";
         AnsiConsole.MarkupLine(msg);
     }
 }
@@ -65,7 +72,8 @@ public class ConfigurationException : Exception, IPrintableException
 
     public void Print()
     {
-        AnsiConsole.MarkupLine($"\n[bold red]X[/] Configuration Error: [white]{Markup.Escape(Message)}[/]");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[bold red]X[/] Configuration Error: [white]{Markup.Escape(Message)}[/]");
     }
 }
 
@@ -75,7 +83,8 @@ public class MagnetException : Exception, IPrintableException
 
     public void Print()
     {
-        AnsiConsole.MarkupLine($"\n[bold red]X[/] Magnet Error: [white]{Markup.Escape(Message)}[/]");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[bold red]X[/] Magnet Error: [white]{Markup.Escape(Message)}[/]");
     }
 }
 
@@ -86,7 +95,8 @@ public class DownloadException : Exception, IPrintableException
 
     public void Print()
     {
-        AnsiConsole.MarkupLine($"\n[bold red]X[/] Download Error: [white]{Markup.Escape(Message)}[/]");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[bold red]X[/] Download Error: [white]{Markup.Escape(Message)}[/]");
     }
 }
 
@@ -97,6 +107,7 @@ public class RealDebridClientException : Exception, IPrintableException
 
     public void Print()
     {
-        AnsiConsole.MarkupLine($"\n[bold red]X[/] Client Error: [white]{Markup.Escape(Message)}[/]");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[bold red]X[/] Client Error: [white]{Markup.Escape(Message)}[/]");
     }
 }
