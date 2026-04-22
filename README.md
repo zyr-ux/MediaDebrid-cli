@@ -48,19 +48,19 @@ dotnet run -- [commands]
 
 *   **Interactive Mode** (Guided UI)
     ```bash
-    mediadebrid-cli
+    mediadebrid
     ```
 *   **Resume a Download**
     ```bash
-    mediadebrid-cli resume "/path/to/partially_downloaded_file.mdebrid"
+    mediadebrid resume "/path/to/partially_downloaded_file.mdebrid"
     ```
 *   **Set a Configuration Value**
     ```bash
-    mediadebrid-cli set <key> <value>
+    mediadebrid set <key> <value>
     ```
 *   **List Configurations**
     ```bash
-    mediadebrid-cli list
+    mediadebrid list
     ```
 
 ---
