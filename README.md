@@ -20,6 +20,7 @@ It features a stunning Terminal User Interface (TUI) powered by Spectre.Console,
 - **Segmented / Parallel Downloads**: Splits files into multiple chunks and downloads them concurrently for maximum throughput.
 - **Robust Resumable Downloads**: Persists download state natively within a 4KB binary footer in the file itself.
 - **Heuristic Metadata Resolution**: Advanced signal-based parsing to automatically categorize content as Movies, TV Shows, Games, or Software.
+- **Range-based Season/Episode Selection**: Download specific segments of a show using ranges (e.g., `4-8`) or comma-separated lists (e.g., `1,3,5`).
 - **Interactive Mode**: Launch the app without arguments to enter an intuitive, guided TUI mode.
 - **Pause/Cancel Support**: Gracefully pause or safely cancel downloads with keyboard shortcuts (`p` to pause, `x` to save & exit).
 ---
@@ -120,8 +121,8 @@ The JSON payload contains critical state information:
     { "Start": 0, "End": 268435455, "Current": 150000000 },
     { "Start": 268435456, "End": 536870911, "Current": 268435456 }, ...
   ],
-  "SeasonOverride": 1,
-  "EpisodeOverride": null
+  "SeasonOverride": "1",
+  "EpisodeOverride": "4-8"
 }
 ```
 

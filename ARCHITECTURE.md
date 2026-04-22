@@ -18,7 +18,7 @@ To solve standard terminal wrapping bugs where the cursor gets "stuck" at the le
 Standard progress bars lack the domain-specific data needed for media downloading. We implemented several `ProgressColumn` extensions:
 
 - **`SpinnerColumn`**: A centralized, state-aware spinner. It switches between the "Arc" animation (active), a green checkmark `✓` (finished), a blue spinner (saved/paused), and a red `X` (cancelled/failed).
-- **`EpisodeColumn`**: Dynamically displays TV show metadata (e.g., `S01E05`) next to the progress bar when the resolved media type is a "show".
+- **`EpisodeColumn`**: Dynamically displays TV show metadata (e.g., `S01E05`) next to the progress bar. In multi-season downloads, this column extracts the correct season and episode number from the specific file being downloaded for accurate real-time feedback.
 - **`CustomTransferSpeedColumn` & `CustomEtaColumn`**: High-precision calculation columns that pull from a `ConcurrentDictionary` of real-time speeds provided by the `Downloader`.
 
 ---
@@ -77,3 +77,6 @@ Downloads are automatically sorted into a logical hierarchy:
 - **TV Shows**: `MediaRoot/TV Shows/Title (Year)/Season XX/Filename.mkv`
 - **Games**: `GamesRoot/Game Setups/Title (Year)/Filename.exe`
 - **Others**: `OthersRoot/Other/Filename.zip`
+
+### 5.1 Dynamic Season Resolution
+When a user selects a range of seasons (e.g., `1-3`) or downloads all seasons from a pack, the `PathGenerator` performs **Per-File Resolution**. Instead of relying on a single global season setting, it parses the filename of each unrestricted link to determine its specific `Season XX` folder, ensuring a perfectly organized local library even in complex multi-season runs.
