@@ -185,7 +185,8 @@ public class TuiApp
                     }
 
                     ctx.Status("[yellow]Waiting for Real-Debrid status...[/]");
-                    info = await GetClient().WaitForStatusAsync(torrentId, new[] { "waiting_files_selection", "downloaded", "dead" }, cancellationToken);
+                    info = await GetClient().WaitForStatusAsync(torrentId, ["waiting_files_selection", "downloaded", "dead"
+                    ], cancellationToken);
 
                 }
                 catch (TerminationException) { throw; }
@@ -329,7 +330,7 @@ public class TuiApp
                     {
                         ctx.Status("[yellow]Selecting files...[/]");
                         var fileIds = Utils.GetSelectedFiles(info.Files, seasonOverride, episodeOverride, existingEpisodes);
-                        if (!fileIds.Any() && info.Files.Any()) fileIds = new[] { info.Files.First().Id.ToString() };
+                        if (!fileIds.Any() && info.Files.Any()) fileIds = [info.Files.First().Id.ToString()];
                         
                         if (!fileIds.Any())
                         {
@@ -576,9 +577,9 @@ public class TuiApp
                                 // Mark all other active tasks as cancelled to ensure UI correctly reflects failure
                                 foreach (var t in _progressTasks.Values)
                                 {
-                                    if (!t.IsFinished && !_taskDisplayStatuses.ContainsKey(t.Id))
+                                    if (!t.IsFinished)
                                     {
-                                        _taskDisplayStatuses[t.Id] = TaskDisplayStatus.Cancelled;
+                                        _taskDisplayStatuses.TryAdd(t.Id, TaskDisplayStatus.Cancelled);
                                     }
                                 }
 
@@ -627,9 +628,9 @@ public class TuiApp
                         {
                             foreach (var t in _progressTasks.Values)
                             {
-                                if (!t.IsFinished && !_taskDisplayStatuses.ContainsKey(t.Id))
+                                if (!t.IsFinished)
                                 {
-                                    _taskDisplayStatuses[t.Id] = TaskDisplayStatus.Cancelled;
+                                    _taskDisplayStatuses.TryAdd(t.Id, TaskDisplayStatus.Cancelled);
                                 }
                             }
                             break;
@@ -1061,14 +1062,11 @@ public class TuiApp
         }
     }
 
-    private sealed class CustomTransferSpeedColumn : ProgressColumn
+    private sealed class CustomTransferSpeedColumn(ConcurrentDictionary<int, double> speeds) : ProgressColumn
     {
-        private readonly ConcurrentDictionary<int, double> _speeds;
-        public CustomTransferSpeedColumn(ConcurrentDictionary<int, double> speeds) => _speeds = speeds;
-
         public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
         {
-            _speeds.TryGetValue(task.Id, out var speed);
+            speeds.TryGetValue(task.Id, out var speed);
             return new Text($"{Utils.FormatBytes((long)speed)}/s", new Style(Color.Silver));
         }
     }
@@ -1089,14 +1087,11 @@ public class TuiApp
         }
     }
 
-    private sealed class CustomEtaColumn : ProgressColumn
+    private sealed class CustomEtaColumn(ConcurrentDictionary<int, double> speeds) : ProgressColumn
     {
-        private readonly ConcurrentDictionary<int, double> _speeds;
-        public CustomEtaColumn(ConcurrentDictionary<int, double> speeds) => _speeds = speeds;
-
         public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
         {
-            _speeds.TryGetValue(task.Id, out var speed);
+            speeds.TryGetValue(task.Id, out var speed);
             if (speed <= 0) return new Text("--");
 
             var remainingBytes = task.MaxValue - task.Value;
@@ -1113,26 +1108,17 @@ public class TuiApp
         }
     }
 
-    private sealed class SpinnerColumn : ProgressColumn
+    private sealed class SpinnerColumn(TuiApp app, Downloader downloader) : ProgressColumn
     {
-        private readonly Downloader _downloader;
-        private readonly TuiApp _app;
-
-        public SpinnerColumn(TuiApp app, Downloader downloader)
-        {
-            _app = app;
-            _downloader = downloader;
-        }
-
         public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
         {
-            if (_app._taskDisplayStatuses.TryGetValue(task.Id, out var status))
+            if (app._taskDisplayStatuses.TryGetValue(task.Id, out var status))
             {
                 switch (status)
                 {
                     case TaskDisplayStatus.Finished: return new Markup("[bold green]✓[/] ");
                     case TaskDisplayStatus.Saved:
-                        _app._frozenFrames.TryGetValue(task.Id, out var sIdx);
+                        app._frozenFrames.TryGetValue(task.Id, out var sIdx);
                         sIdx %= AppSpinner.Frames.Count;
                         var sFrame = AppSpinner.Frames[sIdx];
                         return new Markup($"[bold blue]{Markup.Escape(sFrame)}[/] ");
@@ -1145,9 +1131,9 @@ public class TuiApp
                 return new Markup("[bold green]✓[/] ");
             }
 
-            if (_downloader.IsPaused)
+            if (downloader.IsPaused)
             {
-                _app._frozenFrames.TryGetValue(task.Id, out var pIdx);
+                app._frozenFrames.TryGetValue(task.Id, out var pIdx);
                 pIdx %= AppSpinner.Frames.Count;
                 var pFrame = AppSpinner.Frames[pIdx];
                 return new Markup($"[bold yellow]{Markup.Escape(pFrame)}[/] ");
@@ -1159,14 +1145,11 @@ public class TuiApp
         }
     }
 
-    private sealed class EpisodeColumn : ProgressColumn
+    private sealed class EpisodeColumn(ConcurrentDictionary<int, string> episodeTexts) : ProgressColumn
     {
-        private readonly ConcurrentDictionary<int, string> _episodeTexts;
-        public EpisodeColumn(ConcurrentDictionary<int, string> episodeTexts) => _episodeTexts = episodeTexts;
-
         public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
         {
-            if (_episodeTexts.TryGetValue(task.Id, out var epText))
+            if (episodeTexts.TryGetValue(task.Id, out var epText))
             {
                 return new Markup($"[orange1]{Markup.Escape(epText)}[/] ");
             }
