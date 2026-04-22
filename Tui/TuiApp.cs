@@ -1,9 +1,6 @@
 using System.Collections.Concurrent;
 using MediaDebrid_cli.Models;
 using Spectre.Console;
-using System.Reflection;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using MediaDebrid_cli.Services;
 using Spectre.Console.Rendering;
 
@@ -23,7 +20,7 @@ public class TuiApp
 
     private static readonly Spinner AppSpinner = Spinner.Known.Arc;
 
-    private enum TaskDisplayStatus { Active, Finished, Saved, Cancelled }
+    private enum TaskDisplayStatus { Finished, Saved, Cancelled }
 
     public TuiApp()
     {
@@ -915,27 +912,6 @@ public class TuiApp
         return null;
     }
 
-    private async Task<T> CancellablePromptAsync<T>(IPrompt<T> prompt, CancellationToken cancellationToken)
-    {
-        var tcs = new TaskCompletionSource<T>();
-        using var registration = cancellationToken.Register(() => tcs.TrySetCanceled());
-
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                var result = AnsiConsole.Prompt(prompt);
-                tcs.TrySetResult(result);
-            }
-            catch (Exception ex)
-            {
-                tcs.TrySetException(ex);
-            }
-        }, cancellationToken);
-
-        return await tcs.Task;
-    }
-
     private static void RenderMetadataPanel(MediaMetadata meta)
     {
         var grid = new Grid()
@@ -1128,26 +1104,6 @@ public class TuiApp
                 return new Text($"{(int)eta.TotalHours}h:{eta.Minutes:D2}m");
             }
 
-            return new Text($"{(int)eta.TotalMinutes}m:{eta.Seconds:D2}s");
-        }
-    }
-
-    private sealed class EtaTimeColumn : ProgressColumn
-    {
-        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
-        {
-            var remaining = task.RemainingTime;
-            if (remaining == null)
-            {
-                return new Text("--");
-            }
-
-            var eta = remaining.Value;
-            if (eta.TotalHours >= 1)
-            {
-                var hours = (int)eta.TotalHours;
-                return new Text($"{hours}h:{eta.Minutes:D2}m");
-            }
 
             return new Text($"{(int)eta.TotalMinutes}m:{eta.Seconds:D2}s");
         }
