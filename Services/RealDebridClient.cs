@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using MediaDebrid_cli.Models;
 
@@ -106,12 +105,13 @@ public class RealDebridClient
 
     private async Task<T> HandleResponseAsync<T>(HttpResponseMessage res, CancellationToken cancellationToken)
     {
+        var body = await res.Content.ReadAsStringAsync(cancellationToken);
+
         if (!res.IsSuccessStatusCode)
         {
-            var errorBody = await res.Content.ReadAsStringAsync(cancellationToken);
             try
             {
-                var errorRes = JsonSerializer.Deserialize<RealDebridErrorResponse>(errorBody);
+                var errorRes = JsonSerializer.Deserialize(body, Serialization.MediaDebridJsonContext.Default.RealDebridErrorResponse);
                 if (errorRes != null && !string.IsNullOrEmpty(errorRes.Error))
                 {
                     throw new RealDebridApiException(errorRes.Error, errorRes.ErrorCode, res.StatusCode);
@@ -123,6 +123,25 @@ public class RealDebridClient
         }
 
         if (typeof(T) == typeof(object)) return default!;
-        return await res.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken) ?? throw new RealDebridClientException("Failed to deserialize Real-Debrid API response.");
+        return DeserializeResponse<T>(body);
+    }
+
+    private static T DeserializeResponse<T>(string body)
+    {
+        object? parsed = typeof(T) switch
+        {
+            var t when t == typeof(TorrentAddResponse) => JsonSerializer.Deserialize(body, Serialization.MediaDebridJsonContext.Default.TorrentAddResponse),
+            var t when t == typeof(List<TorrentItem>) => JsonSerializer.Deserialize(body, Serialization.MediaDebridJsonContext.Default.ListTorrentItem),
+            var t when t == typeof(TorrentInfo) => JsonSerializer.Deserialize(body, Serialization.MediaDebridJsonContext.Default.TorrentInfo),
+            var t when t == typeof(UnrestrictResponse) => JsonSerializer.Deserialize(body, Serialization.MediaDebridJsonContext.Default.UnrestrictResponse),
+            _ => null
+        };
+
+        if (parsed is T result)
+        {
+            return result;
+        }
+
+        throw new RealDebridClientException($"Failed to deserialize Real-Debrid API response for type '{typeof(T).Name}'.");
     }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
 using MediaDebrid_cli.Models;
 
@@ -393,7 +394,7 @@ public class Downloader
     {
         try
         {
-            var json = System.Text.Json.JsonSerializer.Serialize(metadata);
+            var json = JsonSerializer.Serialize(metadata, Serialization.MediaDebridJsonContext.Default.ResumeMetadata);
             var jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
             var magicBytes = System.Text.Encoding.UTF8.GetBytes(MagicMarker);
 
@@ -436,7 +437,7 @@ public class Downloader
             if (fs.Read(buffer, 0, buffer.Length) != buffer.Length) return null;
             
             var json = System.Text.Encoding.UTF8.GetString(buffer).TrimEnd('\0');
-            return System.Text.Json.JsonSerializer.Deserialize<ResumeMetadata>(json);
+            return JsonSerializer.Deserialize(json, Serialization.MediaDebridJsonContext.Default.ResumeMetadata);
         }
         catch { return null; }
     }

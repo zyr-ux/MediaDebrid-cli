@@ -90,8 +90,7 @@ public static class Utils
 
     public static string GetSettingsJson()
     {
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        return JsonSerializer.Serialize(Settings.Instance, options);
+        return JsonSerializer.Serialize(Settings.Instance, Serialization.AppSettingsJsonContext.Default.AppSettings);
     }
 
     public static List<(string Key, string Type, string Description)> GetConfigurationMetadata()

@@ -40,7 +40,7 @@ public static class Settings
             try
             {
                 var json = File.ReadAllText(ConfigFilePath);
-                Instance = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                Instance = JsonSerializer.Deserialize(json, Serialization.AppSettingsJsonContext.Default.AppSettings) ?? new AppSettings();
                 return;
             }
             catch (Exception)
@@ -77,8 +77,7 @@ public static class Settings
             Directory.CreateDirectory(AppDataFolder);
         }
 
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        var json = JsonSerializer.Serialize(Instance, options);
+        var json = JsonSerializer.Serialize(Instance, Serialization.AppSettingsJsonContext.Default.AppSettings);
         File.WriteAllText(ConfigFilePath, json);
     }
 
