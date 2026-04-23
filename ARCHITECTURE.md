@@ -21,6 +21,11 @@ Standard progress bars lack the domain-specific data needed for media downloadin
 - **`EpisodeColumn`**: Dynamically displays TV show metadata (e.g., `S01E05`) next to the progress bar. In multi-season downloads, this column extracts the correct season and episode number from the specific file being downloaded for accurate real-time feedback.
 - **`CustomTransferSpeedColumn` & `CustomEtaColumn`**: High-precision calculation columns that pull from a `ConcurrentDictionary` of real-time speeds provided by the `Downloader`.
 
+### 1.3 Execution Modes
+`TuiApp` handles multiple operational modes routed from the CLI:
+- **Interactive Download**: Prompts for magnets, handles season/episode selection, and downloads the files.
+- **Unrestricted Link Generation (`unres`)**: Follows the same selection flow but bypasses the downloader entirely, instead outputting direct Real-Debrid download URLs to the terminal for external use.
+
 ---
 
 ## 2. Resumable Download Engine (`Services/Downloader.cs`)

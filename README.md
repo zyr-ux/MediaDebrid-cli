@@ -57,6 +57,10 @@ dotnet run -- [commands]
     ```bash
     mediadebrid
     ```
+*   **Generate Unrestricted Links**
+    ```bash
+    mediadebrid unres [optional_magnet_link]
+    ```
 *   **Resume a Download**
     ```bash
     mediadebrid resume "/path/to/partially_downloaded_file.mdebrid"

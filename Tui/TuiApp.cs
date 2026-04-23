@@ -43,7 +43,7 @@ public class TuiApp
         AnsiConsole.Write(new FigletText("MediaDebrid").Color(Color.Green));
     }
 
-    public async Task RunAsync(string magnet, string? seasonOverride = null, string? episodeOverride = null, bool showLogo = true, CancellationToken cancellationToken = default, bool forceResume = false)
+    public async Task RunAsync(string magnet, string? seasonOverride = null, string? episodeOverride = null, bool showLogo = true, CancellationToken cancellationToken = default, bool forceResume = false, bool generateUnresLinks = false)
     {
         if (showLogo)
         {
@@ -448,6 +448,29 @@ public class TuiApp
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold green]✓[/] Files are ready and cached!");
 
+        if (generateUnresLinks)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[bold]Generating Unrestricted Links...[/]");
+            AnsiConsole.WriteLine();
+            
+            await AnsiConsole.Status().StartAsync("[yellow]Unrestricting links...[/]", async ctx =>
+            {
+                ctx.Spinner(Spinner.Known.Arc);
+                foreach (var link in info.Links)
+                {
+                    if (cancellationToken.IsCancellationRequested) break;
+                    
+                    var unrestricted = await GetClient().UnrestrictLinkAsync(link, cancellationToken: cancellationToken);
+                    
+                    AnsiConsole.MarkupLine($"[cyan]{Markup.Escape(unrestricted.Filename)}[/]");
+                    AnsiConsole.MarkupLine($"[white]{unrestricted.Download}[/]");
+                    AnsiConsole.WriteLine();
+                }
+            });
+            return;
+        }
+
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Starting Downloads...[/]");
         AnsiConsole.MarkupLine("[dim]Controls: [yellow]P[/] Pause | [green]X[/] Save & Exit | [red]Ctrl+C[/] Cancel & Delete[/]");
@@ -767,7 +790,7 @@ public class TuiApp
         }
     }
 
-    public async Task RunInteractiveAsync(CancellationToken cancellationToken)
+    public async Task RunInteractiveAsync(CancellationToken cancellationToken, bool generateUnresLinks = false)
     {
         try
         {
@@ -814,7 +837,7 @@ public class TuiApp
 
             if (magnet is null || cancellationToken.IsCancellationRequested) break;
 
-            await RunAsync(magnet, showLogo: false, cancellationToken: cancellationToken);
+            await RunAsync(magnet, showLogo: false, cancellationToken: cancellationToken, generateUnresLinks: generateUnresLinks);
             break;
         }
     }

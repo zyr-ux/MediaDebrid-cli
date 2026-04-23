@@ -18,7 +18,7 @@ Welcome to the `MediaDebrid-cli` repository! This document provides AI agents (a
 The codebase follows a modular structure separating UI, services, and models.
 
 ### `Program.cs` & `Settings.cs`
-- **`Program.cs`**: The entry point of the application. It configures `System.CommandLine`, parses arguments, loads environment variables (via `DotNetEnv`), and boots up the `TuiApp`.
+- **`Program.cs`**: The entry point of the application. It configures `System.CommandLine`, parses arguments, routes commands (interactive, `unres`, `resume`, `set`), loads environment variables (via `DotNetEnv`), and boots up the `TuiApp`.
 - **`Settings.cs`**: Manages application-level settings, integrating both CLI arguments and `.env` configurations.
 
 ### `Tui/` (Terminal UI)

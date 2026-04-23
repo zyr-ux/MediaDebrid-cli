@@ -32,18 +32,26 @@ internal static class Program
             Name = "mediadebrid-cli"
         };
 
-        // ── add Command ────────────────────────────────────────────────────
-        var addCommand = new Command("add", "Add a magnet link and start downloading");
-        var magnetArg = new Argument<string>("magnet") { Description = "Magnet link to process" };
 
-        addCommand.AddArgument(magnetArg);
+        // ── unres Command ──────────────────────────────────────────────────
+        var unresCommand = new Command("unres", "Generate unrestricted links instead of downloading");
+        var unresMagnetArg = new Argument<string?>("magnet", () => null) { Description = "Optional magnet link to process" };
+        
+        unresCommand.AddArgument(unresMagnetArg);
 
-        addCommand.SetHandler(async (magnet) =>
+        unresCommand.SetHandler(async (magnet) =>
         {
-            await app.RunAsync(magnet, null, null, showLogo: true, cts.Token);
-        }, magnetArg);
+            if (string.IsNullOrWhiteSpace(magnet))
+            {
+                await app.RunInteractiveAsync(cts.Token, generateUnresLinks: true);
+            }
+            else
+            {
+                await app.RunAsync(magnet, null, null, showLogo: true, cts.Token, forceResume: false, generateUnresLinks: true);
+            }
+        }, unresMagnetArg);
 
-        rootCommand.AddCommand(addCommand);
+        rootCommand.AddCommand(unresCommand);
 
         // ── set Command ────────────────────────────────────────────────────
         var setCommand = new Command("set", "Set a configuration value");
