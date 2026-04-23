@@ -76,7 +76,6 @@ public class TuiApp
         bool isCached = false;
         bool newlyAdded = false;
 
-        AnsiConsole.WriteLine();
         try
         {
             await AnsiConsole.Status()
@@ -114,6 +113,7 @@ public class TuiApp
             throw new TerminationException($"[bold red]X[/] Network error during cache check: [white]{Markup.Escape(ex.Message)}[/]");
         }
 
+        AnsiConsole.WriteLine();
         if (!isCached)
         {
             string statusMsg = matched?.Status == "downloading" || matched?.Status == "queued" 
@@ -204,6 +204,8 @@ public class TuiApp
 
         if (info == null || resolved == null) return;
 
+        bool needsNewline = true;
+
         if (info.Status == "dead")
         {
             throw new TerminationException("[bold red]X[/] Torrent is dead.");
@@ -212,6 +214,7 @@ public class TuiApp
         // Interactive season selection for multi-season shows
         if (resolved.Type == "show" && string.IsNullOrEmpty(seasonOverride))
         {
+            if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
             var seasonsInTorrent = info.Files
                 .Select(f => Utils.ExtractSeasonNumber(f.Path))
                 .Where(s => s.HasValue)
@@ -272,6 +275,7 @@ public class TuiApp
         // Interactive episode selection for shows
         if (resolved.Type == "show" && string.IsNullOrEmpty(episodeOverride))
         {
+            if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
             try
             {
                 string? input = null;
@@ -378,7 +382,6 @@ public class TuiApp
                         }
 
                         await GetClient().SelectFilesAsync(torrentId, string.Join(",", fileIds), cancellationToken: cancellationToken);
-                        AnsiConsole.MarkupLine("[bold green]✓[/] Selected relevant files.");
                     }
                 }
                 catch (TerminationException) { throw; }
@@ -400,6 +403,7 @@ public class TuiApp
         info = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken);
         if (info.Status != "downloaded")
         {
+            if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
             AnsiConsole.MarkupLine("[bold red]X[/] Magnet is [bold red]not cached[/] on Real-Debrid servers.");
             if (!AnsiConsole.Confirm("Do you want to wait for Real-Debrid to cache it?"))
             {
@@ -409,7 +413,6 @@ public class TuiApp
                 });
                 throw new TerminationException("[red]Caching declined by user. Magnet removed from Real-Debrid account.[/]");
             }
-            AnsiConsole.WriteLine();
         }
 
         if (info.Status != "downloaded")
@@ -423,6 +426,7 @@ public class TuiApp
                 });
         }
 
+        AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold green]✓[/] Files are ready and cached!");
 
         AnsiConsole.WriteLine();
@@ -1058,7 +1062,6 @@ public class TuiApp
             Expand = true
         };
         AnsiConsole.Write(panel);
-        AnsiConsole.WriteLine();
     }
 
     private void OnDownloadProgressChanged(object? sender, DownloadProgressModel e)
