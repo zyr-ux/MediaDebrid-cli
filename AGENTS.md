@@ -28,7 +28,7 @@ The codebase follows a modular structure separating UI, services, and models.
 This directory contains the heavy lifting of the application.
 - **`RealDebridClient.cs`**: Handles all HTTP interactions with the Real-Debrid API (adding magnets, selecting files, un-restricting links).
 - **`Downloader.cs`**: Manages the actual file downloading process. It supports segmented (parallel) downloads, persistent resume capabilities, and precise speed/ETA calculations.
-- **`MetadataResolver.cs`**: Responsible for determining what files need to be downloaded from a parsed magnet link and interacting with the `RealDebridClient` to get the final download URLs.
+- **`MetadataResolver.cs`**: The **unified engine** for all media metadata identification. It uses sophisticated signal-based heuristics to categorize content and extract season/episode data. All name-to-metadata parsing MUST be routed through this class to ensure consistency.
 - **`MagnetParser.cs`**: Utility for parsing and validating magnet link structures.
 - **`PathGenerator.cs`**: Constructs clean, organized, and valid file system paths for the downloaded media based on its metadata.
 - **`Utils.cs`**: General utility methods (e.g., formatting byte sizes to human-readable strings, extracting names).

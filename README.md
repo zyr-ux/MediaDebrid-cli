@@ -144,4 +144,4 @@ For detailed information on the internal systems, please refer to our technical 
 - [Technical Architecture Guide](ARCHITECTURE.md): Deep dive into the TUI system, Download Engine, and Heuristic Resolution.
 - [Agent Guidelines](AGENTS.md): Coding standards and architectural rules for AI and human contributors.
 
-When contributing to this repository, please follow the established patterns for centralized exception handling (`Models/Exceptions.cs`) and the Spectre.Console TUI management.
+When contributing to this repository, please follow the established patterns for centralized exception handling (`Models/Exceptions.cs`), the `MetadataResolver` engine, and the Spectre.Console TUI management.

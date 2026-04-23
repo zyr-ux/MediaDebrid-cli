@@ -53,15 +53,16 @@ To prevent disk fragmentation and ensure immediate file allocation, the app util
 
 ## 3. Heuristic Metadata Resolution (`Services/MetadataResolver.cs`)
 
-The app uses a sophisticated **Signal-Based Heuristic Engine** to identify what is inside a torrent name without querying external databases.
+`MetadataResolver` serves as the **centralized engine** for all name-to-metadata parsing across the application. It replaces brittle, ad-hoc regex extraction with a sophisticated **Signal-Based Heuristic Engine** that identifies content without querying external databases.
 
+- **Unified Source of Truth**: Whether identifying a torrent's category (Movie, Show, Game) or extracting specific TV show seasons/episodes for the TUI and path generation, all logic flows through this class.
 - **Three Domains**: It parses every name three times, scoring it as a **Media** candidate, a **Game** candidate, and a **Software** candidate.
 - **Signal Weights**:
   - `YEAR_DETECTED` (+0.18 for Media).
   - `GLOBAL_RESOLUTION` (+0.15 for Media, -0.15 for Games).
   - `TYPE_GAME_REGEX` (+0.30 for Games).
   - `TV_STANDARD` (SxxExx) (+0.45 for Media).
-- **Confidence Scoring**: Each domain accumulates "Signal" weights. The domain with the highest confidence "wins," and its metadata is used for path generation.
+- **Confidence Scoring**: Each domain accumulates "Signal" weights. The domain with the highest confidence "wins," and its metadata is used for categorization, path generation, and real-time display.
 
 ---
 
@@ -84,4 +85,4 @@ Downloads are automatically sorted into a logical hierarchy:
 - **Others**: `OthersRoot/Other/Filename.zip`
 
 ### 5.1 Dynamic Season Resolution
-When a user selects a range of seasons (e.g., `1-3`) or downloads all seasons from a pack, the `PathGenerator` performs **Per-File Resolution**. Instead of relying on a single global season setting, it parses the filename of each unrestricted link to determine its specific `Season XX` folder, ensuring a perfectly organized local library even in complex multi-season runs.
+When a user selects a range of seasons (e.g., `1-3`) or downloads all seasons from a pack, the `PathGenerator` performs **Per-File Resolution**. Instead of relying on a single global season setting, it utilizes the `MetadataResolver` to parse the filename of each unrestricted link to determine its specific `Season XX` folder, ensuring a perfectly organized local library even in complex multi-season runs.
