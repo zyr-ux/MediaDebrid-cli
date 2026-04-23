@@ -275,44 +275,63 @@ public class TuiApp
         // Interactive episode selection for shows
         if (resolved.Type == "show" && string.IsNullOrEmpty(episodeOverride))
         {
-            if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
-            try
+            var sRange = Utils.ParseRange(seasonOverride);
+            var episodesInTorrent = info.Files
+                .Where(f => (sRange.Count == 0 || Utils.IsSeasonMatch(f.Path, sRange)) && f.Bytes > 50_000_000)
+                .Select(f => Utils.ExtractEpisodeNumber(f.Path))
+                .Where(e => e.HasValue)
+                .Select(e => e!.Value)
+                .Distinct()
+                .OrderBy(e => e)
+                .ToList();
+
+            if (episodesInTorrent.Count == 1)
             {
-                string? input = null;
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    input = await ReadLineWithEffectAsync("Enter [green]episode number or range[/] (e.g. 1-12) to download (leave empty for all)", cancellationToken);
-                    
-                    if (cancellationToken.IsCancellationRequested) break;
-                    if (string.IsNullOrWhiteSpace(input)) break;
-
-                    var parsed = Utils.ParseRange(input);
-                    if (!parsed.Any())
-                    {
-                        AnsiConsole.MarkupLine("[red]Please enter a valid episode number or range (e.g., 1-5, 8).[/]");
-                        continue;
-                    }
-
-                    var sRange = Utils.ParseRange(seasonOverride);
-                    if (!info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, parsed, sRange.Any() ? sRange : null)))
-                    {
-                        var scope = sRange.Any() ? $"in selected seasons" : "in this torrent";
-                        AnsiConsole.MarkupLine($"[red]No episodes from range {input} found {scope}.[/]");
-                        continue;
-                    }
-                    break;
-                }
-
-                if (!string.IsNullOrWhiteSpace(input))
-                {
-                    episodeOverride = input;
-                    resolved.Episode = input;
-                    AnsiConsole.MarkupLine($"[bold green]✓[/] Selected episodes [cyan]{input}[/].");
-                }
+                if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
+                episodeOverride = episodesInTorrent[0].ToString();
+                resolved.Episode = episodeOverride;
+                AnsiConsole.MarkupLine($"[bold green]✓[/] Only one episode detected ([cyan]E{episodesInTorrent[0]:D2}[/]). Auto-selecting.");
             }
-            catch (OperationCanceledException)
+            else
             {
-                throw new TerminationException("[red]Application terminated. Exiting...[/]");
+                if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
+                try
+                {
+                    string? input = null;
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        input = await ReadLineWithEffectAsync("Enter [green]episode number or range[/] (e.g. 1-12) to download (leave empty for all)", cancellationToken);
+                        
+                        if (cancellationToken.IsCancellationRequested) break;
+                        if (string.IsNullOrWhiteSpace(input)) break;
+
+                        var parsed = Utils.ParseRange(input);
+                        if (!parsed.Any())
+                        {
+                            AnsiConsole.MarkupLine("[red]Please enter a valid episode number or range (e.g., 1-5, 8).[/]");
+                            continue;
+                        }
+
+                        if (!info.Files.Any(f => Utils.IsEpisodeMatch(f.Path, parsed, sRange.Any() ? sRange : null)))
+                        {
+                            var scope = sRange.Any() ? $"in selected seasons" : "in this torrent";
+                            AnsiConsole.MarkupLine($"[red]No episodes from range {input} found {scope}.[/]");
+                            continue;
+                        }
+                        break;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(input))
+                    {
+                        episodeOverride = input;
+                        resolved.Episode = input;
+                        AnsiConsole.MarkupLine($"[bold green]✓[/] Selected episodes [cyan]{input}[/].");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw new TerminationException("[red]Application terminated. Exiting...[/]");
+                }
             }
         }
 
