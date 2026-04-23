@@ -75,7 +75,7 @@ To maintain a clean TUI, errors are not simply thrown; they are **Polymorphic**.
 Downloads are automatically sorted into a logical hierarchy:
 - **Movies**: `MediaRoot/Movies/Title (Year)/Filename.mkv`
 - **TV Shows**: `MediaRoot/TV Shows/Title (Year)/Season XX/Filename.mkv`
-- **Games**: `GamesRoot/Game Setups/Title (Year)/Filename.exe`
+- **Games**: `GamesRoot/Game Setups/Title/Filename.exe`
 - **Others**: `OthersRoot/Other/Filename.zip`
 
 ### 5.1 Dynamic Season Resolution
