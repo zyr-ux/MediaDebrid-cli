@@ -6,7 +6,7 @@
 
 
 
-MediaDebrid-cli is a powerful, feature-rich command-line interface (CLI) application built using **.NET 10.0** and C#. It acts as an advanced downloader that utilizes the **Real-Debrid API** to quickly resolve magnet links and download media files directly to your system. 
+MediaDebrid is a powerful, feature-rich command-line interface (CLI) application built using **.NET 10.0** and C#. It acts as an advanced downloader that utilizes the **Real-Debrid API** to quickly resolve magnet links and download media files directly to your system. 
 
 It features a stunning Terminal User Interface (TUI) powered by Spectre.Console, and under the hood, it handles complex parallel downloads with robust resuming capabilities.
 
@@ -90,7 +90,7 @@ Configuration is stored in `~AppData/Roaming/MediaDebrid/config.json` (on Window
 
 ## 🧠 Architecture: The `.mdebrid` Custom File Format
 
-To achieve completely self-contained, resumable parallel downloads without littering the filesystem with sidecar metadata files, `MediaDebrid-cli` implements a custom temporary file format: **`.mdebrid`**.
+To achieve completely self-contained, resumable parallel downloads without littering the filesystem with sidecar metadata files, `MediaDebrid` implements a custom temporary file format: **`.mdebrid`**.
 
 ### How it Works
 
