@@ -26,7 +26,7 @@ jobs:
           # Linux
           - os: ubuntu-latest
             rid: linux-x64
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             rid: linux-arm64
 
           # macOS
@@ -64,10 +64,12 @@ jobs:
       # --- Windows: per-arch installer ---
       - name: Build Inno Setup Installer
         if: runner.os == 'Windows'
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
-        with:
-          path: installer.iss
-          options: /DMyAppVersion=${{ steps.version.outputs.ver }} /DArch=${{ matrix.arch }}
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            /DMyAppVersion=${{ steps.version.outputs.ver }} `
+            /DArch=${{ matrix.arch }} `
+            installer.iss
 
       - name: Prepare Windows Artifacts
         if: runner.os == 'Windows'
