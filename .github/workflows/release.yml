@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -54,7 +57,7 @@ jobs:
 
       - name: Publish
         run: >
-          dotnet publish -c Release
+          dotnet publish MediaDebrid-cli.csproj -c Release
           -r ${{ matrix.rid }}
           /p:PublishAot=true
           /p:SelfContained=true

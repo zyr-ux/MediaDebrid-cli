@@ -145,7 +145,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            AnsiConsole.WriteException(ex);
+            AnsiConsole.MarkupLine($"[red]Unexpected error ({Markup.Escape(ex.GetType().Name)}):[/] [white]{Markup.Escape(ex.Message)}[/]");
             return 1;
         }
     }
