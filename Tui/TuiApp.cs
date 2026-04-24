@@ -968,9 +968,43 @@ public class TuiApp
 
     public void ListConfiguration()
     {
-        var json = Utils.GetSettingsJson();
-        AnsiConsole.MarkupLine("[cyan]Current Configuration:[/]");
-        Console.WriteLine(json);
+        AnsiConsole.WriteLine();
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.White);
+
+        table.AddColumn("[bold]Key[/]");
+        table.AddColumn("[bold]Value[/]");
+
+        var metadata = Utils.GetConfigurationMetadata();
+        foreach (var (key, type, description) in metadata)
+        {
+            string value = key switch
+            {
+                "real_debrid_api_key" => Settings.Instance.RealDebridApiToken,
+                "media_root" => Settings.Instance.MediaRoot,
+                "games_root" => Settings.Instance.GamesRoot,
+                "others_root" => Settings.Instance.OthersRoot,
+                "parallel_download" => Settings.Instance.ParallelDownloadEnabled.ToString().ToLower(),
+                "connections_per_file" => Settings.Instance.ConnectionsPerFile.ToString(),
+                "skip_existing_episodes" => Settings.Instance.SkipExistingEpisodes.ToString().ToLower(),
+                _ => "N/A"
+            };
+
+            // Highlight the API key differently
+            var displayValue = key == "real_debrid_api_key" && !string.IsNullOrEmpty(value)
+                ? $"[green]{value}[/]"
+                : $"[white]{value}[/]";
+
+            table.AddRow(
+                $"[yellow]{key}[/]",
+                displayValue
+            );
+        }
+
+        AnsiConsole.Write(table);
+        AnsiConsole.MarkupLine("[grey] Use 'mediadebrid set <key> <value>' to modify these settings[/]");
+        AnsiConsole.WriteLine();
     }
 
     private async Task<bool> ConfirmAsync(string prompt, CancellationToken ct, bool defaultValue = true)

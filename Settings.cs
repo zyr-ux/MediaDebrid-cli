@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DotNetEnv;
 using MediaDebrid_cli.Models;
+using MediaDebrid_cli.SecretsManager;
 
 namespace MediaDebrid_cli;
 
@@ -34,40 +35,57 @@ public static class Settings
 
     public static void Load()
     {
-        // Try to load from JSON first
+        // 1. Initialize with defaults or load from JSON if it exists
         if (File.Exists(ConfigFilePath))
         {
             try
             {
                 var json = File.ReadAllText(ConfigFilePath);
                 Instance = JsonSerializer.Deserialize(json, Serialization.AppSettingsJsonContext.Default.AppSettings) ?? new AppSettings();
-                return;
             }
-            catch (Exception)
+            catch { /* Fall back to defaults */ }
+        }
+
+        // 2. Always load .env file to ensure environment variables are available
+        try { Env.TraversePath().Load(); } catch { }
+
+        // 3. Try to load token from secure storage (Primary Source)
+        string? secureToken = null;
+        try
+        {
+            secureToken = SecretsManagerFactory.GetStorage().LoadAsync("RealDebridToken").GetAwaiter().GetResult();
+        }
+        catch { /* Secure storage unavailable or empty */ }
+
+        if (!string.IsNullOrWhiteSpace(secureToken))
+        {
+            Instance.RealDebridApiToken = secureToken;
+        }
+        else
+        {
+            // 4. AUTOMATIC MIGRATION: If vault is empty, check environment variables
+            var envToken = Environment.GetEnvironmentVariable("REAL_DEBRID_API_TOKEN");
+            if (!string.IsNullOrWhiteSpace(envToken))
             {
-                // Fall back to env or defaults if parsing fails
+                Instance.RealDebridApiToken = envToken;
+                
+                // Automatically persist the discovered token to the secure vault
+                try
+                {
+                    SecretsManagerFactory.GetStorage().SaveAsync("RealDebridToken", envToken).GetAwaiter().GetResult();
+                }
+                catch { /* Failed to migrate, but we can still use the env token for this session */ }
             }
         }
 
-        // Legacy .env and Environment variables loading
-        Env.TraversePath().Load();
-
-        Instance.RealDebridApiToken = Environment.GetEnvironmentVariable("REAL_DEBRID_API_TOKEN") ?? "";
-        Instance.MediaRoot = Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? "";
-        Instance.GamesRoot = Environment.GetEnvironmentVariable("GAMES_ROOT") ?? "";
-        Instance.OthersRoot = Environment.GetEnvironmentVariable("OTHERS_ROOT") ?? "";
-
-        if (bool.TryParse(Environment.GetEnvironmentVariable("PARALLEL_DOWNLOAD_ENABLED"), out bool pd))
-            Instance.ParallelDownloadEnabled = pd;
-
-        if (int.TryParse(Environment.GetEnvironmentVariable("CONNECTIONS_PER_FILE"), out int cpf))
+        // 5. Fallback for other settings from environment if they were missing in JSON
+        if (string.IsNullOrWhiteSpace(Instance.MediaRoot)) Instance.MediaRoot = Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? "";
+        if (string.IsNullOrWhiteSpace(Instance.GamesRoot)) Instance.GamesRoot = Environment.GetEnvironmentVariable("GAMES_ROOT") ?? "";
+        if (string.IsNullOrWhiteSpace(Instance.OthersRoot)) Instance.OthersRoot = Environment.GetEnvironmentVariable("OTHERS_ROOT") ?? "";
+        
+        // Load numeric/boolean flags from env if not already set (legacy support)
+        if (Instance.ConnectionsPerFile == 8 && int.TryParse(Environment.GetEnvironmentVariable("CONNECTIONS_PER_FILE"), out int cpf)) 
             Instance.ConnectionsPerFile = cpf;
-
-        if (bool.TryParse(Environment.GetEnvironmentVariable("SKIP_EXISTING_EPISODES"), out bool skip))
-            Instance.SkipExistingEpisodes = skip;
-
-        // Save immediately if we loaded from legacy methods so next time it uses json
-        Save();
     }
 
     public static void Save()
@@ -77,8 +95,23 @@ public static class Settings
             Directory.CreateDirectory(AppDataFolder);
         }
 
+        // Save non-sensitive settings to JSON
         var json = JsonSerializer.Serialize(Instance, Serialization.AppSettingsJsonContext.Default.AppSettings);
         File.WriteAllText(ConfigFilePath, json);
+        
+        // Save sensitive API token to secure vault
+        if (!string.IsNullOrWhiteSpace(Instance.RealDebridApiToken))
+        {
+            try
+            {
+                SecretsManagerFactory.GetStorage().SaveAsync("RealDebridToken", Instance.RealDebridApiToken).GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // If vault fails during a manual save, we might want to log it or warn the user,
+                // but we shouldn't crash the JSON save.
+            }
+        }
     }
 
     public static string GetRootPathForType(string? type)

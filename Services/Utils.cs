@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using MediaDebrid_cli.Models;
+using MediaDebrid_cli.SecretsManager;
 
 namespace MediaDebrid_cli.Services;
 
@@ -118,6 +119,7 @@ public static class Utils
                 {
                     object convertedValue = Convert.ChangeType(value, prop.PropertyType);
                     prop.SetValue(Settings.Instance, convertedValue);
+                    
                     Settings.Save();
                     return (true, $"Successfully updated '{propName}' to '{value}'", propName);
                 }
@@ -129,11 +131,6 @@ public static class Utils
         }
 
         return (false, $"Configuration key '{key}' not found.", null);
-    }
-
-    public static string GetSettingsJson()
-    {
-        return JsonSerializer.Serialize(Settings.Instance, Serialization.AppSettingsJsonContext.Default.AppSettings);
     }
 
     public static List<(string Key, string Type, string Description)> GetConfigurationMetadata()

@@ -7,6 +7,7 @@ public class AppSettings
 {
     [JsonPropertyName("real_debrid_api_key")]
     [Description("Required. Your Real-Debrid API token")]
+    [JsonIgnore]
     public string RealDebridApiToken { get; set; } = "";
 
     [JsonPropertyName("media_root")]
