@@ -83,7 +83,7 @@ public static class Settings
         if (string.IsNullOrWhiteSpace(Instance.GamesRoot)) Instance.GamesRoot = Environment.GetEnvironmentVariable("GAMES_ROOT") ?? "";
         if (string.IsNullOrWhiteSpace(Instance.OthersRoot)) Instance.OthersRoot = Environment.GetEnvironmentVariable("OTHERS_ROOT") ?? "";
         
-        // Load numeric/boolean flags from env if not already set (legacy support)
+        // Load numeric flags from env if still at defaults (legacy support)
         if (Instance.ConnectionsPerFile == 8 && int.TryParse(Environment.GetEnvironmentVariable("CONNECTIONS_PER_FILE"), out int cpf)) 
             Instance.ConnectionsPerFile = cpf;
     }

@@ -836,43 +836,38 @@ public class TuiApp
 
         ShowLogo();
 
+        string? magnet = null;
         while (!cancellationToken.IsCancellationRequested)
         {
-            string? magnet = null;
-            
-            while (!cancellationToken.IsCancellationRequested)
+            magnet = await ReadLineWithEffectAsync("Enter [green]Magnet Link[/]: ", cancellationToken, ConsoleColor.Green);
+
+            if (cancellationToken.IsCancellationRequested) break;
+
+            // Validation logic (mirrors the previous TextPrompt validators)
+            if (string.IsNullOrWhiteSpace(magnet))
             {
-                magnet = await ReadLineWithEffectAsync("Enter [green]Magnet Link[/]: ", cancellationToken, ConsoleColor.Green);
-
-                if (cancellationToken.IsCancellationRequested) break;
-
-                // Validation logic (mirrors the previous TextPrompt validators)
-                if (string.IsNullOrWhiteSpace(magnet))
-                {
-                    AnsiConsole.MarkupLine("[red]Magnet link cannot be empty.[/]");
-                    continue;
-                }
-
-                if (!magnet.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase))
-                {
-                    AnsiConsole.MarkupLine("[red]Invalid magnet link format.[/]");
-                    continue;
-                }
-
-                if (MagnetParser.ExtractHash(magnet) == null)
-                {
-                    AnsiConsole.MarkupLine("[red]Invalid magnet link: Missing BTIH hash (xt=urn:btih:).[/]");
-                    continue;
-                }
-
-                break;
+                AnsiConsole.MarkupLine("[red]Magnet link cannot be empty.[/]");
+                continue;
             }
 
-            if (magnet is null || cancellationToken.IsCancellationRequested) break;
+            if (!magnet.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase))
+            {
+                AnsiConsole.MarkupLine("[red]Invalid magnet link format.[/]");
+                continue;
+            }
 
-            await RunAsync(magnet, showLogo: false, cancellationToken: cancellationToken, generateUnresLinks: generateUnresLinks);
+            if (MagnetParser.ExtractHash(magnet) == null)
+            {
+                AnsiConsole.MarkupLine("[red]Invalid magnet link: Missing BTIH hash (xt=urn:btih:).[/]");
+                continue;
+            }
+
             break;
         }
+
+        if (magnet is null || cancellationToken.IsCancellationRequested) return;
+
+        await RunAsync(magnet, showLogo: false, cancellationToken: cancellationToken, generateUnresLinks: generateUnresLinks);
     }
 
     public async Task RunResumeAsync(string path, CancellationToken cancellationToken)

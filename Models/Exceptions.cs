@@ -2,28 +2,17 @@ using Spectre.Console;
 
 namespace MediaDebrid_cli.Models;
 
-public interface IPrintableException
-{
-    void Print();
-}
-
 // Robust Polymorphic termination exception handling
-public class TerminationException : OperationCanceledException, IPrintableException
+public class TerminationException(string? customMessage = null) : OperationCanceledException
 {
-    private readonly string? _customMessage;
     private bool _wasPrinted;
-
-    public TerminationException(string? customMessage = null) : base()
-    {
-        _customMessage = customMessage;
-    }
 
     public void Print()
     {
         if (_wasPrinted) return;
 
         // Skip newline for empty custom messages (silent exit)
-        if (_customMessage != null && string.IsNullOrEmpty(_customMessage))
+        if (customMessage != null && string.IsNullOrEmpty(customMessage))
         {
             _wasPrinted = true;
             return;
@@ -31,9 +20,9 @@ public class TerminationException : OperationCanceledException, IPrintableExcept
 
         AnsiConsole.WriteLine();
 
-        if (_customMessage != null)
+        if (customMessage != null)
         {
-            AnsiConsole.MarkupLine(_customMessage);
+            AnsiConsole.MarkupLine(customMessage);
         }
         else
         {
@@ -44,7 +33,7 @@ public class TerminationException : OperationCanceledException, IPrintableExcept
     }
 }
 
-public class RealDebridApiException : HttpRequestException, IPrintableException
+public class RealDebridApiException : HttpRequestException
 {
     public string Error { get; }
     public int ErrorCode { get; }
@@ -66,7 +55,7 @@ public class RealDebridApiException : HttpRequestException, IPrintableException
     }
 }
 
-public class ConfigurationException : Exception, IPrintableException
+public class ConfigurationException : Exception
 {
     public ConfigurationException(string message) : base(message) { }
 
@@ -77,7 +66,7 @@ public class ConfigurationException : Exception, IPrintableException
     }
 }
 
-public class MagnetException : Exception, IPrintableException
+public class MagnetException : Exception
 {
     public MagnetException(string message) : base(message) { }
 
@@ -88,7 +77,7 @@ public class MagnetException : Exception, IPrintableException
     }
 }
 
-public class DownloadException : Exception, IPrintableException
+public class DownloadException : Exception
 {
     public DownloadException(string message, Exception? innerException = null) 
         : base(message, innerException) { }
@@ -100,7 +89,7 @@ public class DownloadException : Exception, IPrintableException
     }
 }
 
-public class RealDebridClientException : Exception, IPrintableException
+public class RealDebridClientException : Exception
 {
     public RealDebridClientException(string message, Exception? innerException = null) 
         : base(message, innerException) { }
