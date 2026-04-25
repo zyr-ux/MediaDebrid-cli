@@ -153,7 +153,7 @@ public static class Utils
     public static string GetRootHelpDescription()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Magnet → Media downloader");
+        sb.AppendLine("Magnet → Media Downloader");
         sb.AppendLine();
         sb.AppendLine("USAGE");
         sb.AppendLine("  mediadebrid-cli <command> [options]");
@@ -164,7 +164,7 @@ public static class Utils
         sb.AppendLine($"  {"list",-30} - Show current configuration");
         sb.AppendLine();
         sb.AppendLine("OPTIONS");
-        sb.AppendLine($"  {"-v, --version",-30} - Show version");
+        sb.AppendLine($"  {"--version",-30} - Show version");
         sb.AppendLine($"  {"-h, --help",-30} - Show help");
         sb.AppendLine();
         sb.AppendLine();
