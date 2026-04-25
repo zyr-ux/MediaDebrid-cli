@@ -68,15 +68,38 @@ Alternatively, once published, you can use **WinGet**:
 winget install MediaDebrid
 ```
 
-### Linux & macOS
-1.  Download the appropriate binary for your system (e.g., `mediadebrid-linux-x64` or `mediadebrid-osx-x64`) from the [Releases](https://github.com/zyr-ux/MediaDebrid-cli/releases) page.
-2.  Make the binary executable:
+### Linux
+1.  Download the appropriate archive for your system (e.g., `mediadebrid-linux-x64.tar.gz`) from the [Releases](https://github.com/zyr-ux/MediaDebrid-cli/releases) page.
+2.  Extract the archive (this will extract the `mediadebrid` binary directly into your current folder):
     ```bash
-    chmod +x mediadebrid-linux-x64
+    tar -xzvf mediadebrid-linux-x64.tar.gz
     ```
-3.  (Optional) Move it to your local bin directory for global access:
+3.  Ensure the binary is executable (permissions are usually preserved, but this ensures it):
     ```bash
-    sudo mv mediadebrid-linux-x64 /usr/local/bin/mediadebrid
+    chmod +x mediadebrid
+    ```
+4.  (Optional) Move the binary to your local bin directory for global access:
+    ```bash
+    sudo mv mediadebrid /usr/local/bin/mediadebrid
+    ```
+
+### macOS
+1.  Download the appropriate archive for your system (e.g., `mediadebrid-macos-arm64.tar.gz` for Apple Silicon) from the [Releases](https://github.com/zyr-ux/MediaDebrid-cli/releases) page.
+2.  Extract the archive (this will extract the `mediadebrid` binary directly into your current folder):
+    ```bash
+    tar -xzvf mediadebrid-macos-arm64.tar.gz
+    ```
+3.  Ensure the binary is executable:
+    ```bash
+    chmod +x mediadebrid
+    ```
+4.  Remove the macOS quarantine attribute (Gatekeeper restriction):
+    ```bash
+    xattr -d com.apple.quarantine mediadebrid
+    ```
+5.  (Optional) Move the binary to your local bin directory for global access:
+    ```bash
+    sudo mv mediadebrid /usr/local/bin/mediadebrid
     ```
 
 ---

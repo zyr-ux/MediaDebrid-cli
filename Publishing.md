@@ -30,10 +30,10 @@ Every release automatically generates and attaches the following 6 assets:
 | :--- | :--- | :--- |
 | **Windows** | x64 | `mediadebrid-win-installer-x64.exe` |
 | **Windows** | ARM64 | `mediadebrid-win-installer-arm64.exe` |
-| **Linux** | x64 | `mediadebrid-linux-x64` |
-| **Linux** | ARM64 | `mediadebrid-linux-arm64` |
-| **macOS (Intel)** | x64 | `mediadebrid-mac-x64` |
-| **macOS (Apple Silicon)** | ARM64 | `mediadebrid-mac-arm64` |
+| **Linux** | x64 | `mediadebrid-linux-x64.tar.gz` |
+| **Linux** | ARM64 | `mediadebrid-linux-arm64.tar.gz` |
+| **macOS (Intel)** | x64 | `mediadebrid-macos-x64.tar.gz` |
+| **macOS (Apple Silicon)** | ARM64 | `mediadebrid-macos-arm64.tar.gz` |
 
 ### How to Trigger a New Release:
 1.  **Update Version**: Update `<Version>` in `MediaDebrid-cli.csproj`.
@@ -72,21 +72,26 @@ wingetcreate new https://github.com/zyr-ux/MediaDebrid-cli/releases/download/v1.
 
 ## 🍎 5. macOS & Linux Instructions
 
-For Unix-based systems, users download the binary directly.
+For Unix-based systems, users download the `.tar.gz` archive directly. The archive contains the `mediadebrid` binary with execution permissions already set.
 
 ### macOS Security (Quarantine)
 Because the binary is not notarized, macOS may block it. Users need to run:
 ```bash
-# Remove quarantine attribute
-xattr -d com.apple.quarantine mediadebrid-mac-arm64
+# Extract the archive
+tar -xzvf mediadebrid-macos-arm64.tar.gz
 
-# Make executable and move to path
-chmod +x mediadebrid-mac-arm64
-sudo mv mediadebrid-mac-arm64 /usr/local/bin/mediadebrid
+# Remove quarantine attribute
+xattr -d com.apple.quarantine mediadebrid
+
+# Move to path
+sudo mv mediadebrid /usr/local/bin/mediadebrid
 ```
 
 ### Linux Installation
 ```bash
-chmod +x mediadebrid-linux-x64
-sudo mv mediadebrid-linux-x64 /usr/local/bin/mediadebrid
+# Extract the archive
+tar -xzvf mediadebrid-linux-x64.tar.gz
+
+# Move to path
+sudo mv mediadebrid /usr/local/bin/mediadebrid
 ```
