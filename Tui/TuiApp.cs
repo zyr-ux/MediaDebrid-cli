@@ -246,9 +246,10 @@ public class TuiApp
                 try
                 {
                     string? input = null;
+                    var seasonRangeSuggestion = seasonsInTorrent.Any() ? $"{seasonsInTorrent.Min()}-{seasonsInTorrent.Max()}" : "1-3";
                     while (!cancellationToken.IsCancellationRequested)
                     {
-                        input = await ReadLineWithEffectAsync($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number or range[/] (e.g. 1-3) to download (leave empty for all)", cancellationToken);
+                        input = await ReadLineWithEffectAsync($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number or range[/] (e.g. {seasonRangeSuggestion}) to download (leave empty for all)", cancellationToken);
                         
                         if (cancellationToken.IsCancellationRequested) break;
                         if (string.IsNullOrWhiteSpace(input)) break;
@@ -256,7 +257,7 @@ public class TuiApp
                         var parsed = Utils.ParseRange(input);
                         if (!parsed.Any())
                         {
-                            AnsiConsole.MarkupLine("[red]Please enter a valid season number or range (e.g., 1-2, 4).[/]");
+                            AnsiConsole.MarkupLine($"[red]Please enter a valid season number or range (e.g., {seasonRangeSuggestion}).[/]");
                             continue;
                         }
                         
@@ -318,9 +319,10 @@ public class TuiApp
                 try
                 {
                     string? input = null;
+                    var epRangeSuggestion = episodesInTorrent.Any() ? $"{episodesInTorrent.Min()}-{episodesInTorrent.Max()}" : "1-12";
                     while (!cancellationToken.IsCancellationRequested)
                     {
-                        input = await ReadLineWithEffectAsync("Enter [green]episode number or range[/] (e.g. 1-12) to download (leave empty for all)", cancellationToken);
+                        input = await ReadLineWithEffectAsync($"Enter [green]episode number or range[/] (e.g. {epRangeSuggestion}) to download (leave empty for all)", cancellationToken);
                         
                         if (cancellationToken.IsCancellationRequested) break;
                         if (string.IsNullOrWhiteSpace(input)) break;
@@ -328,7 +330,7 @@ public class TuiApp
                         var parsed = Utils.ParseRange(input);
                         if (!parsed.Any())
                         {
-                            AnsiConsole.MarkupLine("[red]Please enter a valid episode number or range (e.g., 1-5, 8).[/]");
+                            AnsiConsole.MarkupLine($"[red]Please enter a valid episode number or range (e.g., {epRangeSuggestion}).[/]");
                             continue;
                         }
 
