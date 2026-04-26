@@ -728,7 +728,6 @@ public class TuiApp
 
                     while (!downloadLoopTask.IsCompleted)
                     {
-                        ctx.Refresh();
 
                         if (linkedCts.Token.IsCancellationRequested) break;
                         
@@ -781,7 +780,6 @@ public class TuiApp
 
             if (!linkedCts.IsCancellationRequested)
             {
-                AnsiConsole.WriteLine();
                 AnsiConsole.MarkupLine("[bold green]All downloads completed![/]");
                 shouldDeletePartial = false;
             }
