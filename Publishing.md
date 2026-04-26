@@ -28,12 +28,12 @@ Every release automatically generates and attaches the following 6 assets:
 
 | Platform | Architecture | File Name |
 | :--- | :--- | :--- |
-| **Windows** | x64 | `mediadebrid-win-installer-x64.exe` |
-| **Windows** | ARM64 | `mediadebrid-win-installer-arm64.exe` |
-| **Linux** | x64 | `mediadebrid-linux-x64.tar.gz` |
-| **Linux** | ARM64 | `mediadebrid-linux-arm64.tar.gz` |
-| **macOS (Intel)** | x64 | `mediadebrid-macos-x64.tar.gz` |
-| **macOS (Apple Silicon)** | ARM64 | `mediadebrid-macos-arm64.tar.gz` |
+| **Windows** | x64 | `mediadebrid-v1.x.x-win-installer-x64.exe` |
+| **Windows** | ARM64 | `mediadebrid-v1.x.x-win-installer-arm64.exe` |
+| **Linux** | x64 | `mediadebrid-v1.x.x-linux-x64.tar.gz` |
+| **Linux** | ARM64 | `mediadebrid-v1.x.x-linux-arm64.tar.gz` |
+| **macOS (Intel)** | x64 | `mediadebrid-v1.x.x-macos-x64.tar.gz` |
+| **macOS (Apple Silicon)** | ARM64 | `mediadebrid-v1.x.x-macos-arm64.tar.gz` |
 
 ### How to Trigger a New Release:
 1.  **Update Version**: Update `<Version>` in `MediaDebrid-cli.csproj`.
@@ -65,7 +65,7 @@ WinGet is the primary distribution channel for Windows.
 Use `wingetcreate` to submit the new installers. Note that you should provide both the x64 and ARM64 URLs for a complete manifest.
 
 ```powershell
-wingetcreate new https://github.com/zyr-ux/MediaDebrid-cli/releases/download/v1.1.0/mediadebrid-win-installer-x64.exe
+wingetcreate new https://github.com/zyr-ux/MediaDebrid-cli/releases/download/v1.1.0/mediadebrid-v1.1.0-win-installer-x64.exe
 ```
 
 ---
@@ -78,7 +78,7 @@ For Unix-based systems, users download the `.tar.gz` archive directly. The archi
 Because the binary is not notarized, macOS may block it. Users need to run:
 ```bash
 # Extract the archive
-tar -xzvf mediadebrid-macos-arm64.tar.gz
+tar -xzvf mediadebrid-v1.1.0-macos-arm64.tar.gz
 
 # Remove quarantine attribute
 xattr -d com.apple.quarantine mediadebrid
@@ -90,7 +90,7 @@ sudo mv mediadebrid /usr/local/bin/mediadebrid
 ### Linux Installation
 ```bash
 # Extract the archive
-tar -xzvf mediadebrid-linux-x64.tar.gz
+tar -xzvf mediadebrid-v1.1.0-linux-x64.tar.gz
 
 # Move to path
 sudo mv mediadebrid /usr/local/bin/mediadebrid

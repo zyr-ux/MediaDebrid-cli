@@ -79,10 +79,11 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.arch }}" == "x64" ]]; then
-            mv Output/*.exe ./publish/${{ matrix.rid }}/mediadebrid-win-installer-x64.exe
+            mv Output/*.exe ./publish/${{ matrix.rid }}/mediadebrid-v${{ steps.version.outputs.ver }}-win-installer-x64.exe
           else
-            mv Output/*.exe ./publish/${{ matrix.rid }}/mediadebrid-win-installer-arm64.exe
+            mv Output/*.exe ./publish/${{ matrix.rid }}/mediadebrid-v${{ steps.version.outputs.ver }}-win-installer-arm64.exe
           fi
+          rm ./publish/${{ matrix.rid }}/mediadebrid.exe
 
       # --- Unix: chmod + tarball ---
       - name: Prepare Unix Artifacts
@@ -92,11 +93,11 @@ jobs:
 
           cd ./publish/${{ matrix.rid }}
           if [[ "${{ matrix.rid }}" == "osx-x64" ]]; then
-            tar -czvf mediadebrid-macos-x64.tar.gz mediadebrid
+            tar -czvf mediadebrid-v${{ steps.version.outputs.ver }}-macos-x64.tar.gz mediadebrid
           elif [[ "${{ matrix.rid }}" == "osx-arm64" ]]; then
-            tar -czvf mediadebrid-macos-arm64.tar.gz mediadebrid
+            tar -czvf mediadebrid-v${{ steps.version.outputs.ver }}-macos-arm64.tar.gz mediadebrid
           else
-            tar -czvf mediadebrid-${{ matrix.rid }}.tar.gz mediadebrid
+            tar -czvf mediadebrid-v${{ steps.version.outputs.ver }}-${{ matrix.rid }}.tar.gz mediadebrid
           fi
           rm mediadebrid
           cd ../../
@@ -121,11 +122,7 @@ jobs:
           generate_release_notes: true
           draft: true
           files: |
-            mediadebrid-win-x64/mediadebrid-win-installer-x64.exe
-            mediadebrid-win-arm64/mediadebrid-win-installer-arm64.exe
-            mediadebrid-linux-x64/mediadebrid-linux-x64.tar.gz
-            mediadebrid-linux-arm64/mediadebrid-linux-arm64.tar.gz
-            mediadebrid-osx-x64/mediadebrid-macos-x64.tar.gz
-            mediadebrid-osx-arm64/mediadebrid-macos-arm64.tar.gz
+            mediadebrid-*/*.exe
+            mediadebrid-*/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

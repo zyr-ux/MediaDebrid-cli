@@ -58,7 +58,7 @@ dotnet run -- [commands]
 ## 💻 Installation
 
 ### Windows
-The recommended way to install on Windows is via the [GitHub Releases](https://github.com/zyr-ux/MediaDebrid-cli/releases) page. Download and run `MediaDebrid-Setup.exe`. This will:
+The recommended way to install on Windows is via the [GitHub Releases](https://github.com/zyr-ux/MediaDebrid-cli/releases) page. Download and run the `mediadebrid-vX.X.X-win-installer-x64.exe` installer. This will:
 *   Install the app to `Program Files`.
 *   Automatically add `mediadebrid` to your system **PATH**.
 *   Provide an uninstaller via Control Panel.
@@ -69,10 +69,10 @@ winget install MediaDebrid
 ```
 
 ### Linux
-1.  Download the appropriate archive for your system (e.g., `mediadebrid-linux-x64.tar.gz`) from the [Releases](https://github.com/zyr-ux/MediaDebrid-cli/releases) page.
+1.  Download the appropriate archive for your system (e.g., `mediadebrid-v1.1.0-linux-x64.tar.gz`) from the [Releases](https://github.com/zyr-ux/MediaDebrid-cli/releases) page.
 2.  Extract the archive (this will extract the `mediadebrid` binary directly into your current folder):
     ```bash
-    tar -xzvf mediadebrid-linux-x64.tar.gz
+    tar -xzvf mediadebrid-v1.1.0-linux-x64.tar.gz
     ```
 3.  Ensure the binary is executable (permissions are usually preserved, but this ensures it):
     ```bash
@@ -84,10 +84,10 @@ winget install MediaDebrid
     ```
 
 ### macOS
-1.  Download the appropriate archive for your system (e.g., `mediadebrid-macos-arm64.tar.gz` for Apple Silicon) from the [Releases](https://github.com/zyr-ux/MediaDebrid-cli/releases) page.
+1.  Download the appropriate archive for your system (e.g., `mediadebrid-v1.1.0-macos-arm64.tar.gz` for Apple Silicon) from the [Releases](https://github.com/zyr-ux/MediaDebrid-cli/releases) page.
 2.  Extract the archive (this will extract the `mediadebrid` binary directly into your current folder):
     ```bash
-    tar -xzvf mediadebrid-macos-arm64.tar.gz
+    tar -xzvf mediadebrid-v1.1.0-macos-arm64.tar.gz
     ```
 3.  Ensure the binary is executable:
     ```bash
