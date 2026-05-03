@@ -51,7 +51,7 @@ public static class PathGenerator
         if (safeType.Equals("show", StringComparison.OrdinalIgnoreCase))
         {
             string seasonStr = season.HasValue ? $"Season {season.Value:D2}" : "Season 01";
-            return Path.Combine(Settings.MediaRoot, "TV Shows", folderName, seasonStr);
+            return Path.Combine(Settings.MediaRoot, "TV Shows", safeTitle, seasonStr);
         }
 
         if (safeType.Equals("game", StringComparison.OrdinalIgnoreCase))
