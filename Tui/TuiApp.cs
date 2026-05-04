@@ -647,8 +647,6 @@ public class TuiApp
             throw new TerminationException($"[bold red]All selected {typeLabel} already exist in your local library.[/]");
         }
 
-        AnsiConsole.WriteLine();
-
         try
         {
             await AnsiConsole.Progress()
@@ -872,14 +870,12 @@ public class TuiApp
 
             if (shouldDeletePartial)
             {
-                AnsiConsole.WriteLine();
                 AnsiConsole.MarkupLine("[red]Download cancelled. Cleaning up partial files...[/]");
                 var cleanupRoot = resolved != null ? Settings.GetRootPathForType(resolved.Type) : null;
                 Downloader.CleanupFiles(activePaths, cleanupRoot, force: true);
             }
             else if (linkedCts.IsCancellationRequested)
             {
-                AnsiConsole.WriteLine();
                 AnsiConsole.MarkupLine("[yellow]Stopping... Partial progress preserved for resume.[/]");
                 var cleanupRoot = resolved != null ? Settings.GetRootPathForType(resolved.Type) : null;
                 Downloader.CleanupFiles(activePaths, cleanupRoot, force: false);
@@ -1221,7 +1217,7 @@ public class TuiApp
 
         if (!string.IsNullOrWhiteSpace(meta.Resolution))
         {
-            AddGridRow("Res", $"[cyan]{Markup.Escape(meta.Resolution)}[/]");
+            AddGridRow("Resolution", $"[cyan]{Markup.Escape(meta.Resolution)}[/]");
         }
 
         if (!string.IsNullOrWhiteSpace(meta.Quality))
