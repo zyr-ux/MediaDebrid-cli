@@ -119,23 +119,9 @@ public class TuiApp
         }
 
         AnsiConsole.WriteLine();
-        if (!isCached && !newlyAdded)
+        if (!newlyAdded)
         {
-            // Existing torrent in RD account that isn't cached — ask the user early.
-            string statusMsg = matched?.Status == "downloading" || matched?.Status == "queued" 
-                ? $"is currently [bold red]{matched.Status}[/]" 
-                : "is [bold red]Not Cached[/]";
-            
-            AnsiConsole.MarkupLine($"[bold red]X[/] This magnet {statusMsg} on Real-Debrid servers.");
-            
-            if (!await ConfirmAsync("Do you want Real-Debrid to cache it for you?", cancellationToken))
-            {
-                throw new TerminationException("[red]Caching declined by user.[/]");
-            }
-        }
-        else if (!newlyAdded)
-        {
-            // Existing torrent confirmed cached.
+            // Existing torrent confirmed.
             AnsiConsole.MarkupLine($"[bold green]✓[/] Found existing torrent.");
         }
         else
@@ -162,7 +148,6 @@ public class TuiApp
                         resolved = await _metadataResolver.ResolveAsync(magnetName, cancellationToken: cancellationToken);
                         ApplyOverrides(resolved);
                         resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, resolved.Season);
-                        RenderMetadataPanel(resolved);
                     }
 
                     if (string.IsNullOrEmpty(torrentId))
@@ -182,7 +167,6 @@ public class TuiApp
                         resolved = await _metadataResolver.ResolveAsync(info.Filename, cancellationToken: cancellationToken);
                         ApplyOverrides(resolved);
                         resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, resolved.Season);
-                        RenderMetadataPanel(resolved);
                     }
 
                     ctx.Status("[yellow]Waiting for Real-Debrid status...[/]");
@@ -212,11 +196,10 @@ public class TuiApp
             throw new TerminationException("[bold red]X[/] Torrent is dead.");
         }
 
-        // Interactive season selection for multi-season shows
-        if (resolved.Type == "show" && string.IsNullOrEmpty(seasonOverride))
+        List<int> seasonsInTorrent = new();
+        if (resolved.Type == "show")
         {
-            if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
-            var seasonsInTorrent = info.Files
+            seasonsInTorrent = info.Files
                 .Select(f =>
                 {
                     var meta = _metadataResolver.ParseName(f.Path);
@@ -229,54 +212,59 @@ public class TuiApp
                 .OrderBy(s => s)
                 .ToList();
 
-            if (seasonsInTorrent.Count > 1)
+            if (seasonsInTorrent.Count > 1 && string.IsNullOrEmpty(seasonOverride))
             {
-                // Display accurate intent for all-seasons mode before prompting for overrides.
+                // Display accurate intent for all-seasons mode
                 resolved.Season = "Multiple";
                 var defaultSeasonDir = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, 1);
                 resolved.Destination = Directory.GetParent(defaultSeasonDir)?.FullName ?? defaultSeasonDir;
-                RenderMetadataPanel(resolved);
+            }
+        }
 
-                try
+        if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
+        RenderMetadataPanel(resolved);
+
+        // Interactive season selection for multi-season shows
+        if (resolved.Type == "show" && string.IsNullOrEmpty(seasonOverride) && seasonsInTorrent.Count > 1)
+        {
+            try
+            {
+                string? input = null;
+                var seasonRangeSuggestion = seasonsInTorrent.Any() ? $"{seasonsInTorrent.Min()}-{seasonsInTorrent.Max()}" : "1-3";
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    string? input = null;
-                    var seasonRangeSuggestion = seasonsInTorrent.Any() ? $"{seasonsInTorrent.Min()}-{seasonsInTorrent.Max()}" : "1-3";
-                    while (!cancellationToken.IsCancellationRequested)
-                    {
-                        input = await ReadLineWithEffectAsync($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number or range[/] (e.g. {seasonRangeSuggestion}) to download (leave empty for all)", cancellationToken);
-                        
-                        if (cancellationToken.IsCancellationRequested) break;
-                        if (string.IsNullOrWhiteSpace(input)) break;
+                    input = await ReadLineWithEffectAsync($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number or range[/] (e.g. {seasonRangeSuggestion}) to download (leave empty for all)", cancellationToken);
+                    
+                    if (cancellationToken.IsCancellationRequested) break;
+                    if (string.IsNullOrWhiteSpace(input)) break;
 
-                        var parsed = Utils.ParseRange(input);
-                        if (!parsed.Any())
-                        {
-                            AnsiConsole.MarkupLine($"[red]Please enter a valid season number or range (e.g., {seasonRangeSuggestion}).[/]");
-                            continue;
-                        }
-                        
-                        if (!parsed.Any(s => seasonsInTorrent.Contains(s)))
-                        {
-                            AnsiConsole.MarkupLine($"[red]None of the specified seasons ({input}) were found in this torrent.[/]");
-                            continue;
-                        }
-                        break;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(input))
+                    var parsed = Utils.ParseRange(input);
+                    if (!parsed.Any())
                     {
-                        seasonOverride = input;
-                        resolved.Season = input;
-                        resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year); // Generic dir for ranges
-                        AnsiConsole.WriteLine();
-                        AnsiConsole.MarkupLine($"[bold green]✓[/] Selected seasons [cyan]{input}[/].");
-                        RenderMetadataPanel(resolved);
+                        AnsiConsole.MarkupLine($"[red]Please enter a valid season number or range (e.g., {seasonRangeSuggestion}).[/]");
+                        continue;
                     }
+                    
+                    if (!parsed.Any(s => seasonsInTorrent.Contains(s)))
+                    {
+                        AnsiConsole.MarkupLine($"[red]None of the specified seasons ({input}) were found in this torrent.[/]");
+                        continue;
+                    }
+                    break;
                 }
-                catch (OperationCanceledException)
+
+                if (!string.IsNullOrWhiteSpace(input))
                 {
-                    throw new TerminationException("[red]Application terminated. Exiting...[/]");
+                    seasonOverride = input;
+                    resolved.Season = input;
+                    resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year); // Generic dir for ranges
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine($"[bold green]✓[/] Selected seasons [cyan]{input}[/].");
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TerminationException("[red]Application terminated. Exiting...[/]");
             }
         }
 
@@ -500,32 +488,70 @@ public class TuiApp
         // Definitive cache check: after file selection the status is authoritative.
         // "downloaded" = cached. Anything else (downloading, queued, etc.) = not cached.
         info = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken);
-        if (info.Status != "downloaded")
+        bool wasUncached = info.Status != "downloaded";
+        if (wasUncached)
         {
             AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("[bold red]X[/] Magnet is [bold red]not cached[/] on Real-Debrid servers.");
-            if (!await ConfirmAsync("Do you want to wait for Real-Debrid to cache it?", cancellationToken))
-            {
-                await AnsiConsole.Status().StartAsync("[red]Removing magnet...[/]", async _ => 
-                {
-                    await GetClient().DeleteTorrentAsync(torrentId, cancellationToken);
-                });
-                throw new TerminationException("[red]Caching declined by user. Magnet removed from Real-Debrid account.[/]");
-            }
-        }
-
-        if (info.Status != "downloaded")
-        {
+            AnsiConsole.MarkupLine("[bold yellow]![/] Magnet is [bold yellow]not cached[/] on Real-Debrid servers.");
+            AnsiConsole.WriteLine();
+            
+            bool userCancelled = false;
             await AnsiConsole.Status()
-                .StartAsync("Waiting for Real-Debrid to cache files...", async ctx =>
+                .StartAsync("File is being cached by Real-Debrid [dim][[press N to stop]][/]...", async ctx =>
                 {
                     ctx.Spinner(Spinner.Known.Arc);
                     ctx.SpinnerStyle(Style.Parse("yellow"));
-                    info = await GetClient().WaitForStatusAsync(torrentId, ["downloaded"], cancellationToken, pollDelayMs: 5000);
+
+                    using var pollCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    
+                    var pollTask = Task.Run(async () => 
+                    {
+                        try
+                        {
+                            while (!pollCts.Token.IsCancellationRequested)
+                            {
+                                info = await GetClient().GetTorrentInfoAsync(torrentId, pollCts.Token);
+                                if (info.Status == "downloaded" || info.Status == "dead") return;
+                                await Task.Delay(5000, pollCts.Token);
+                            }
+                        }
+                        catch (OperationCanceledException) { }
+                    }, pollCts.Token);
+
+                    while (!pollTask.IsCompleted)
+                    {
+                        if (Console.KeyAvailable)
+                        {
+                            var key = Console.ReadKey(intercept: true);
+                            if (key.KeyChar == 'n' || key.KeyChar == 'N')
+                            {
+                                userCancelled = true;
+                                await pollCts.CancelAsync();
+                                break;
+                            }
+                        }
+                        await Task.Delay(100, cancellationToken);
+                    }
+                    
+                    await pollTask; // Ensure it finishes cleanly
                 });
+
+            if (userCancelled)
+            {
+                await AnsiConsole.Status().StartAsync("[red]Stopping cache and removing magnet...[/]", async _ => 
+                {
+                    await GetClient().DeleteTorrentAsync(torrentId, cancellationToken);
+                });
+                throw new TerminationException("[red]Caching stopped by user. Magnet removed from Real-Debrid account.[/]");
+            }
+            
+            if (info.Status == "dead")
+            {
+                throw new TerminationException("[bold red]X[/] Torrent is dead.");
+            }
         }
 
-        AnsiConsole.WriteLine();
+        if (!wasUncached) AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold green]✓[/] Files are ready and [bold cyan]cached[/]!");
 
         if (generateUnresLinks)
