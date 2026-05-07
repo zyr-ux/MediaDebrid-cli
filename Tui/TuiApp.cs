@@ -95,16 +95,14 @@ public class TuiApp
                     
                     if (matched == null)
                     {
-                        ctx.Status("[yellow]Adding magnet to check cache status...[/]");
+                        ctx.Status("[yellow]Adding magnet to Real-Debrid...[/]");
                         var addRes = await GetClient().AddMagnetAsync(magnet, cancellationToken);
                         torrentId = addRes.Id;
                         newlyAdded = true;
                         
-                        // Fetch fresh info to get status
                         var cacheInfo = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken);
-                        isCached = cacheInfo.Status == "downloaded" || cacheInfo.Status == "waiting_files_selection";
+                        isCached = cacheInfo.Status == "downloaded";
                         
-                        // Update matched with enough info for the prompt if needed
                         matched = new TorrentItem { Id = torrentId, Status = cacheInfo.Status, Hash = hash };
                     }
                     else
@@ -121,8 +119,9 @@ public class TuiApp
         }
 
         AnsiConsole.WriteLine();
-        if (!isCached)
+        if (!isCached && !newlyAdded)
         {
+            // Existing torrent in RD account that isn't cached — ask the user early.
             string statusMsg = matched?.Status == "downloading" || matched?.Status == "queued" 
                 ? $"is currently [bold red]{matched.Status}[/]" 
                 : "is [bold red]Not Cached[/]";
@@ -131,23 +130,18 @@ public class TuiApp
             
             if (!await ConfirmAsync("Do you want Real-Debrid to cache it for you?", cancellationToken))
             {
-                if (newlyAdded && !string.IsNullOrEmpty(torrentId))
-                {
-                    await AnsiConsole.Status().StartAsync("[red]Removing magnet...[/]", async _ => 
-                    {
-                        await GetClient().DeleteTorrentAsync(torrentId, cancellationToken);
-                    });
-                }
-                throw new TerminationException("[red]Caching declined by user. Magnet removed from Real-Debrid account.[/]");
+                throw new TerminationException("[red]Caching declined by user.[/]");
             }
         }
-        else if (matched != null && !newlyAdded)
+        else if (!newlyAdded)
         {
-            AnsiConsole.MarkupLine($"[bold green]✓[/] Found existing torrent. (Status: [cyan]Cached[/])");
+            // Existing torrent confirmed cached.
+            AnsiConsole.MarkupLine($"[bold green]✓[/] Found existing torrent.");
         }
-        else if (newlyAdded)
+        else
         {
-            AnsiConsole.MarkupLine($"[bold green]✓[/] Magnet added to Real-Debrid. (Status: [cyan]Cached[/])");
+            // Newly added — cache status is unknown until after file selection.
+            AnsiConsole.MarkupLine($"[bold green]✓[/] Magnet added to Real-Debrid.");
         }
 
         AnsiConsole.WriteLine();
@@ -446,8 +440,13 @@ public class TuiApp
                                     throw new TerminationException($"[bold red]{scope} already exist in your local library.[/]");
                                 }
 
-                                AnsiConsole.WriteLine();
-                                AnsiConsole.MarkupLine($"[yellow]X[/] Found [cyan]{existingEpisodeKeys.Count}[/] existing episodes in local library. They will be skipped.");
+                                // Count only the episodes that are actually in the torrent AND in the library
+                                var skippedCount = episodesInTorrent.Count(key => existingEpisodeKeys.Contains(key));
+                                if (skippedCount > 0)
+                                {
+                                    AnsiConsole.WriteLine();
+                                    AnsiConsole.MarkupLine($"[yellow]X[/] Found [cyan]{skippedCount}[/] existing episode{(skippedCount == 1 ? "" : "s")} in local library. {(skippedCount == 1 ? "It" : "They")} will be skipped.");
+                                }
                             }
                         }
                         else
@@ -498,11 +497,12 @@ public class TuiApp
 
         if (info == null || resolved == null) return;
 
-        // Definitive cache check: After selection, status MUST be 'downloaded' if it was cached.
+        // Definitive cache check: after file selection the status is authoritative.
+        // "downloaded" = cached. Anything else (downloading, queued, etc.) = not cached.
         info = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken);
         if (info.Status != "downloaded")
         {
-            if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
+            AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[bold red]X[/] Magnet is [bold red]not cached[/] on Real-Debrid servers.");
             if (!await ConfirmAsync("Do you want to wait for Real-Debrid to cache it?", cancellationToken))
             {
@@ -526,7 +526,7 @@ public class TuiApp
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[bold green]✓[/] Files are ready and cached!");
+        AnsiConsole.MarkupLine("[bold green]✓[/] Files are ready and [bold cyan]cached[/]!");
 
         if (generateUnresLinks)
         {
