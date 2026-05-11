@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using MediaDebrid_cli.Models;
 using Spectre.Console;
 using MediaDebrid_cli.Services;
-using Spectre.Console.Rendering;
 
 namespace MediaDebrid_cli.Tui;
 
@@ -11,6 +10,7 @@ public class TuiApp
     private RealDebridClient? _client;
     private readonly Downloader _downloader;
     private readonly MetadataResolver _metadataResolver;
+    private MediaWorkflowService? _workflowService;
 
     private readonly ConcurrentDictionary<string, ProgressTask> _progressTasks;
     private readonly ConcurrentDictionary<int, double> _taskSpeeds;
@@ -37,6 +37,7 @@ public class TuiApp
     }
 
     private RealDebridClient GetClient() => _client ??= new RealDebridClient();
+    private MediaWorkflowService GetWorkflowService() => _workflowService ??= new MediaWorkflowService(GetClient(), _metadataResolver);
 
     public async Task RunAsync(string magnet, string? seasonOverride = null, string? episodeOverride = null, bool showLogo = true, bool forceResume = false, bool generateUnresLinks = false, CancellationToken cancellationToken = default)
     {
@@ -54,7 +55,7 @@ public class TuiApp
 
         try
         {
-            await EnsureConfiguredAsync(cancellationToken);
+            await Components.EnsureConfiguredAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -115,42 +116,12 @@ public class TuiApp
                 ctx.Spinner(Spinner.Known.Arc);
                 ctx.SpinnerStyle(Style.Parse("green"));
 
-                void ApplyOverrides(MediaMetadata meta) => Utils.ApplyMetadataOverrides(meta, seasonOverride, episodeOverride);
-
                 try
                 {
-                    var magnetName = MagnetParser.ExtractName(magnet);
-                    if (!string.IsNullOrEmpty(magnetName))
-                    {
-                        ctx.Status("[yellow]Resolving metadata from magnet...[/]");
-                        resolved = await _metadataResolver.ResolveAsync(magnetName, cancellationToken: cancellationToken);
-                        ApplyOverrides(resolved);
-                        resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, resolved.Season);
-                    }
-
-                    if (string.IsNullOrEmpty(torrentId))
-                    {
-                        ctx.Status("[yellow]Submitting magnet to Real-Debrid...[/]");
-                        var addRes = await GetClient().AddMagnetAsync(magnet, cancellationToken: cancellationToken);
-                        torrentId = addRes.Id;
-                        AnsiConsole.MarkupLine($"[bold green]✓[/] Magnet submitted. RD ID: [cyan]{torrentId}[/]");
-                    }
-
-                    ctx.Status("[yellow]Fetching torrent info...[/]");
-                    info = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken: cancellationToken);
-
-                    if (resolved == null)
-                    {
-                        ctx.Status("[yellow]Resolving metadata from Real-Debrid filename...[/]");
-                        resolved = await _metadataResolver.ResolveAsync(info.Filename, cancellationToken: cancellationToken);
-                        ApplyOverrides(resolved);
-                        resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, resolved.Season);
-                    }
-
-                    ctx.Status("[yellow]Waiting for Real-Debrid status...[/]");
-                    info = await GetClient().WaitForStatusAsync(torrentId, ["waiting_files_selection", "downloaded", "dead"
-                    ], cancellationToken);
-
+                    var initResult = await GetWorkflowService().InitializeMediaAsync(magnet, torrentId, seasonOverride, episodeOverride, cancellationToken);
+                    resolved = initResult.Resolved;
+                    info = initResult.Info;
+                    torrentId = initResult.TorrentId;
                 }
                 catch (TerminationException) { throw; }
                 catch (OperationCanceledException) { throw; }
@@ -177,7 +148,7 @@ public class TuiApp
         List<int> seasonsInTorrent = [];
         if (resolved.Type == "show")
         {
-            seasonsInTorrent = Utils.GetAvailableSeasons(info.Files, _metadataResolver);
+            seasonsInTorrent = GetWorkflowService().GetAvailableSeasons(info.Files);
 
             if (seasonsInTorrent.Count > 1 && string.IsNullOrEmpty(seasonOverride))
             {
@@ -201,8 +172,8 @@ public class TuiApp
                 var seasonRangeSuggestion = seasonsInTorrent.Count > 0 ? $"{seasonsInTorrent.Min()}-{seasonsInTorrent.Max()}" : "1-3";
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    input = await ReadLineWithEffectAsync($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number or range[/] (e.g. {seasonRangeSuggestion}) to download (leave empty for all)", cancellationToken);
-                    
+                    input = await Components.ReadLineWithEffectAsync($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number or range[/] (e.g. {seasonRangeSuggestion}) to download (leave empty for all)", cancellationToken);
+
                     if (cancellationToken.IsCancellationRequested) break;
                     if (string.IsNullOrWhiteSpace(input)) break;
 
@@ -212,7 +183,7 @@ public class TuiApp
                         AnsiConsole.MarkupLine($"[red]Please enter a valid season number or range (e.g., {seasonRangeSuggestion}).[/]");
                         continue;
                     }
-                    
+
                     if (!parsed.Any(s => seasonsInTorrent.Contains(s)))
                     {
                         AnsiConsole.MarkupLine($"[red]None of the specified seasons ({input}) were found in this torrent.[/]");
@@ -240,7 +211,7 @@ public class TuiApp
         if (resolved.Type == "show" && string.IsNullOrEmpty(episodeOverride))
         {
             var sRange = Utils.ParseRange(seasonOverride);
-            var episodesInTorrent = Utils.GetAvailableEpisodes(info.Files, sRange, _metadataResolver);
+            var episodesInTorrent = GetWorkflowService().GetAvailableEpisodes(info.Files, sRange);
 
             if (episodesInTorrent.Count == 1)
             {
@@ -258,8 +229,8 @@ public class TuiApp
                     var epRangeSuggestion = episodesInTorrent.Count > 0 ? $"{episodesInTorrent.Min()}-{episodesInTorrent.Max()}" : "1-12";
                     while (!cancellationToken.IsCancellationRequested)
                     {
-                        input = await ReadLineWithEffectAsync($"Enter [green]episode number or range[/] (e.g. {epRangeSuggestion}) to download (leave empty for all)", cancellationToken);
-                        
+                        input = await Components.ReadLineWithEffectAsync($"Enter [green]episode number or range[/] (e.g. {epRangeSuggestion}) to download (leave empty for all)", cancellationToken);
+
                         if (cancellationToken.IsCancellationRequested) break;
                         if (string.IsNullOrWhiteSpace(input)) break;
 
@@ -275,7 +246,7 @@ public class TuiApp
                             var meta = _metadataResolver.ParseName(f.Path);
                             var fileSeasons = Utils.ParseRange(meta.Season);
                             var fileEpisodes = Utils.ParseRange(meta.Episode);
-                            
+
                             if (sRange.Count > 0 && !fileSeasons.Any(s => sRange.Contains(s))) return false;
                             return fileEpisodes.Any(e => parsed.Contains(e));
                         }))
@@ -305,7 +276,7 @@ public class TuiApp
         var selectedSeasons = Utils.ParseRange(seasonOverride);
         if (resolved.Type == "show" && selectedSeasons.Count == 0)
         {
-            selectedSeasons = Utils.DetermineSelectedSeasons(info.Files, seasonOverride, resolved.Season, _metadataResolver);
+            selectedSeasons = GetWorkflowService().DetermineSelectedSeasons(info.Files, seasonOverride, resolved.Season);
         }
 
         await AnsiConsole.Status()
@@ -316,30 +287,13 @@ public class TuiApp
 
                 try
                 {
-                    var validation = Utils.ValidateExistingFiles(resolved, info, selectedSeasons, seasonOverride, episodeOverride);
-                    existingEpisodeKeys = validation.ExistingEpisodeKeys;
-                    
-                    if (validation.AllSkipped)
-                    {
-                        throw new TerminationException(validation.ErrorMessage);
-                    }
-                    if (!string.IsNullOrEmpty(validation.WarnMessage))
+                    var result = await GetWorkflowService().SubmitFileSelectionAsync(resolved, info, torrentId, selectedSeasons, seasonOverride, episodeOverride, cancellationToken);
+                    existingEpisodeKeys = result.ExistingEpisodeKeys;
+
+                    if (!string.IsNullOrEmpty(result.WarnMessage))
                     {
                         AnsiConsole.WriteLine();
-                        AnsiConsole.MarkupLine(validation.WarnMessage);
-                    }
-
-                    if (info.Status == "waiting_files_selection")
-                    {
-                        ctx.Status("[yellow]Selecting files...[/]");
-                        var fileIds = Utils.GetSelectedFiles(info.Files, seasonOverride, episodeOverride, existingEpisodeKeys);
-
-                        if (fileIds.Length == 0)
-                        {
-                            throw new TerminationException("[bold red]X[/] No files found to download.");
-                        }
-
-                        await GetClient().SelectFilesAsync(torrentId, string.Join(",", fileIds), cancellationToken: cancellationToken);
+                        AnsiConsole.MarkupLine(result.WarnMessage);
                     }
                 }
                 catch (TerminationException) { throw; }
@@ -366,7 +320,7 @@ public class TuiApp
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[bold yellow]![/] Magnet is [bold yellow]not cached[/] on Real-Debrid servers.");
             AnsiConsole.WriteLine();
-            
+
             bool userCancelled = false;
             await AnsiConsole.Status()
                 .StartAsync("File is being cached by Real-Debrid [dim][[press N to stop]][/]...", async ctx =>
@@ -375,12 +329,12 @@ public class TuiApp
                     ctx.SpinnerStyle(Style.Parse("yellow"));
 
                     using var pollCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    
-                    var pollTask = Task.Run(async () => 
+
+                    var pollTask = Task.Run(async () =>
                     {
                         try
                         {
-                            info = await GetClient().WaitForStatusAsync(torrentId, ["downloaded", "dead"], pollCts.Token, 5000);
+                            info = await GetWorkflowService().WaitForCachingAsync(torrentId, pollCts.Token);
                         }
                         catch (OperationCanceledException) { }
                     }, pollCts.Token);
@@ -399,19 +353,19 @@ public class TuiApp
                         }
                         await Task.Delay(100, cancellationToken);
                     }
-                    
+
                     await pollTask; // Ensure it finishes cleanly
                 });
 
             if (userCancelled)
             {
-                await AnsiConsole.Status().StartAsync("[red]Stopping cache and removing magnet...[/]", async _ => 
+                await AnsiConsole.Status().StartAsync("[red]Stopping cache and removing magnet...[/]", async _ =>
                 {
                     await GetClient().DeleteTorrentAsync(torrentId, cancellationToken);
                 });
                 throw new TerminationException("[red]Caching stopped by user. Magnet removed from Real-Debrid account.[/]");
             }
-            
+
             if (info.Status == "dead")
             {
                 throw new TerminationException("[bold red]X[/] Torrent is dead.");
@@ -426,7 +380,7 @@ public class TuiApp
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[bold]Generating Unrestricted Links...[/]");
             AnsiConsole.WriteLine();
-            
+
             await AnsiConsole.Status().StartAsync("[yellow]Unrestricting links...[/]", async ctx =>
             {
                 ctx.Spinner(Spinner.Known.Arc);
@@ -458,12 +412,12 @@ public class TuiApp
             ctx.Spinner(Spinner.Known.Arc);
             var unrestrictedLinks = await GetClient().UnrestrictLinksAsync(info.Links, linkedCts.Token);
             queuedDownloads = _downloader.PrepareDownloadQueue(
-                unrestrictedLinks, 
-                resolved, 
-                magnet, 
-                seasonOverride, 
-                existingEpisodeKeys, 
-                selectedSeasons, 
+                unrestrictedLinks,
+                resolved,
+                magnet,
+                seasonOverride,
+                existingEpisodeKeys,
+                selectedSeasons,
                 linkedCts.Token);
         });
 
@@ -475,7 +429,7 @@ public class TuiApp
             if (resumeData != null)
             {
                 if (!forceResume && needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
-                if (forceResume || await ConfirmAsync($"[yellow]Partial download found for {Markup.Escape(unrestricted.Filename)} ({Utils.FormatBytes(resumeData.Segments.Sum(s => s.Current - s.Start))} / {Utils.FormatBytes(resumeData.TotalSize)}). Resume?[/]", cancellationToken))
+                if (forceResume || await Components.ConfirmAsync($"[yellow]Partial download found for {Markup.Escape(unrestricted.Filename)} ({Utils.FormatBytes(resumeData.Segments.Sum(s => s.Current - s.Start))} / {Utils.FormatBytes(resumeData.TotalSize)}). Resume?[/]", cancellationToken))
                 {
                     // Keep it
                 }
@@ -486,10 +440,11 @@ public class TuiApp
                 }
             }
         }
-        
+
         if (queuedDownloads.Count == 0 && !generateUnresLinks)
         {
-            var typeLabel = resolved.Type switch {
+            var typeLabel = resolved.Type switch
+            {
                 "show" => "episodes",
                 "movie" => "files",
                 "game" => "files",
@@ -514,153 +469,64 @@ public class TuiApp
                 .StartAsync(async ctx =>
                 {
 
-                    downloadLoopTask = Task.Run(async () =>
-                    {
-                        foreach (var item in queuedDownloads)
+                    downloadLoopTask = _downloader.DownloadQueueAsync(
+                        queuedDownloads,
+                        magnet,
+                        seasonOverride,
+                        episodeOverride,
+                        resolved,
+                        existingEpisodeKeys,
+                        selectedSeasons,
+                        activePaths,
+                        async (unrestricted, destPath, progressKey, resumeData) =>
                         {
-                            var (unrestricted, resumeData, destPath) = item;
-                            var currentResumeData = resumeData;
+                            var filename = unrestricted.Filename;
+                            var displayFilename = filename.Length > 40 ? filename[..37] + "..." : filename;
 
-                            if (linkedCts.Token.IsCancellationRequested) break;
+                            var progressTask = ctx.AddTask($"[cyan]{Markup.Escape(displayFilename)}[/]", new ProgressTaskSettings { AutoStart = false });
+                            _progressTasks[progressKey] = progressTask;
+                            _taskOriginalNames[progressTask.Id] = displayFilename;
 
-                            ProgressTask? progressTask = null;
-                            try
+                            if (resolved.Type == "show")
                             {
-                                var filename = unrestricted.Filename;
-                                var tempPath = destPath + ".mdebrid";
-                                
-                                // Final safety check: Skip if file already exists
-                                if (File.Exists(destPath))
+                                var meta = _metadataResolver.ParseName(filename);
+                                var episodes = Utils.ParseRange(meta.Episode);
+                                if (episodes.Count > 0)
                                 {
-                                    continue;
+                                    var seasons = Utils.ParseRange(meta.Season);
+                                    var sNum = seasons.Count > 0 ? seasons.First() : 1;
+                                    _taskEpisodeTexts[progressTask.Id] = $"S{sNum:D2}E{episodes.First():D2}";
                                 }
-
-                                if (resolved.Type == "show" && Utils.IsEpisodeExisting(filename, existingEpisodeKeys, selectedSeasons))
-                                {
-                                    continue;
-                                }
-
-                                var progressKey = destPath;
-                                activePaths.Add(tempPath);
-
-                                var displayFilename = filename.Length > 40 ? filename[..37] + "..." : filename;
-
-                                progressTask = ctx.AddTask($"[cyan]{Markup.Escape(displayFilename)}[/]", new ProgressTaskSettings { AutoStart = false });
-                                _progressTasks[progressKey] = progressTask;
-                                _taskOriginalNames[progressTask.Id] = displayFilename;
-
-                                if (resolved.Type == "show")
-                                {
-                                    var meta = _metadataResolver.ParseName(filename);
-                                    var episodes = Utils.ParseRange(meta.Episode);
-                                    if (episodes.Count > 0)
-                                    {
-                                        var seasons = Utils.ParseRange(meta.Season);
-                                        var sNum = seasons.Count > 0 ? seasons.First() : 1;
-                                        _taskEpisodeTexts[progressTask.Id] = $"S{sNum:D2}E{episodes.First():D2}";
-                                    }
-                                }
-
-                                progressTask.StartTask();
-
-                                var rootPath = Settings.GetRootPathForType(resolved.Type);
-                                
-                                if (currentResumeData == null)
-                                {
-                                    currentResumeData = new ResumeMetadata
-                                    {
-                                        MagnetUri = magnet,
-                                        FileId = unrestricted.Id,
-                                        TotalSize = 0, // Will be set by downloader
-                                        SeasonOverride = seasonOverride,
-                                        EpisodeOverride = episodeOverride
-                                    };
-                                }
-                                else
-                                {
-                                    // Initialize task with existing progress
-                                    if (currentResumeData.TotalSize > 0)
-                                    {
-                                        progressTask.MaxValue = currentResumeData.TotalSize;
-                                        progressTask.Value = currentResumeData.Segments.Sum(s => s.Current - s.Start);
-                                    }
-                                }
-
-                                await _downloader.DownloadFileAsync(unrestricted.Download, destPath, rootPath, progressKey, linkedCts.Token, currentResumeData);
-
-                                progressTask.Value = progressTask.MaxValue;
-                                progressTask.StopTask();
                             }
-                            catch (OperationCanceledException)
+
+                            if (resumeData.TotalSize > 0)
                             {
-                                progressTask?.StopTask();
-                                break;
+                                progressTask.MaxValue = resumeData.TotalSize;
+                                progressTask.Value = resumeData.Segments.Sum(s => s.Current - s.Start);
                             }
-                            catch (Exception ex)
-                            {
-                                shouldDeletePartial = false;
-                                if (progressTask != null)
-                                {
-                                    _taskDisplayStatuses[progressTask.Id] = TaskDisplayStatus.Cancelled;
-                                    progressTask.StopTask();
-                                }
-                                
-                                // Mark all other active tasks as cancelled to ensure UI correctly reflects failure
-                                foreach (var t in _progressTasks.Values)
-                                {
-                                    if (!t.IsFinished)
-                                    {
-                                        _taskDisplayStatuses.TryAdd(t.Id, TaskDisplayStatus.Cancelled);
-                                    }
-                                }
 
-                                throw new DownloadException($"Download failed: {ex.Message}", ex);
-                            }
-                        }
-                    }, cancellationToken);
-
-                    while (!downloadLoopTask.IsCompleted)
-                    {
-
-                        if (linkedCts.Token.IsCancellationRequested) break;
-                        
-                        if (Console.KeyAvailable)
+                            progressTask.StartTask();
+                            await Task.CompletedTask;
+                        },
+                        async (progressKey) =>
                         {
-                            var key = Console.ReadKey(true);
-                            if (key.Key == ConsoleKey.P)
+                            if (_progressTasks.TryGetValue(progressKey, out var pt))
                             {
-                                _downloader.TogglePause();
+                                pt.Value = pt.MaxValue;
+                                pt.StopTask();
                             }
-                            else if (key.Key == ConsoleKey.X)
+                            await Task.CompletedTask;
+                        },
+                        async (destPath, ex) =>
+                        {
+                            shouldDeletePartial = false;
+                            var key = destPath;
+                            if (_progressTasks.TryGetValue(key, out var pt))
                             {
-                                shouldDeletePartial = false;
-                                var now = Environment.TickCount64;
-                                var interval = (long)Components.AppSpinner.Interval.TotalMilliseconds;
-                                var count = Components.AppSpinner.Frames.Count;
-                                var frameIdx = (int)((now / interval) % count);
+                                _taskDisplayStatuses[pt.Id] = TaskDisplayStatus.Cancelled;
+                                pt.StopTask();
+                            }
 
-                                foreach (var t in _progressTasks.Values)
-                                {
-                                    if (t.IsFinished) continue;
-                                    _taskDisplayStatuses[t.Id] = TaskDisplayStatus.Saved;
-                                    _frozenFrames[t.Id] = frameIdx;
-                                    if (_taskOriginalNames.TryGetValue(t.Id, out var origName))
-                                    {
-                                        var truncated = origName.Length > 33 ? origName[..30] + "..." : origName;
-                                        t.Description = $"[blue]SAVED [/] [cyan]{Markup.Escape(truncated)}[/]";
-                                    }
-                                }
-                                linkedCts.Cancel();
-                                break;
-                            }
-                        }
-                        
-                        try
-                        {
-                            await Task.Delay(100, linkedCts.Token);
-                        }
-                        catch (OperationCanceledException)
-                        {
                             foreach (var t in _progressTasks.Values)
                             {
                                 if (!t.IsFinished)
@@ -668,10 +534,13 @@ public class TuiApp
                                     _taskDisplayStatuses.TryAdd(t.Id, TaskDisplayStatus.Cancelled);
                                 }
                             }
-                            break;
-                        }
-                    }
-                    
+                            await Task.CompletedTask;
+                        },
+                        linkedCts.Token
+                    );
+
+                    await MonitorKeypressesAsync(downloadLoopTask, linkedCts, () => shouldDeletePartial = false);
+
                     if (downloadLoopTask != null) await downloadLoopTask;
 
                 });
@@ -730,7 +599,7 @@ public class TuiApp
     {
         try
         {
-            await EnsureConfiguredAsync(cancellationToken);
+            await Components.EnsureConfiguredAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -742,7 +611,7 @@ public class TuiApp
         string? magnet = null;
         while (!cancellationToken.IsCancellationRequested)
         {
-            magnet = await ReadLineWithEffectAsync("Enter [green]Magnet Link[/]: ", cancellationToken, ConsoleColor.Green);
+            magnet = await Components.ReadLineWithEffectAsync("Enter [green]Magnet Link[/]: ", cancellationToken, ConsoleColor.Green);
 
             if (cancellationToken.IsCancellationRequested) break;
 
@@ -779,162 +648,7 @@ public class TuiApp
         await RunAsync(metadata.MagnetUri, metadata.SeasonOverride, metadata.EpisodeOverride, showLogo: true, forceResume: true, cancellationToken: cancellationToken);
     }
 
-    public async Task EnsureConfiguredAsync(CancellationToken cancellationToken)
-    {
-        if (Settings.IsConfigured()) return;
 
-        cancellationToken.ThrowIfCancellationRequested();
-
-        AnsiConsole.MarkupLine("[yellow]Initial Setup Required[/]");
-        AnsiConsole.MarkupLine("Please provide the following required configuration values:");
-        AnsiConsole.WriteLine();
-
-        try
-        {
-            if (string.IsNullOrWhiteSpace(Settings.Instance.RealDebridApiToken))
-            {
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    var token = await ReadLineWithEffectAsync("Enter [green]Real-Debrid API Key[/]", cancellationToken, secret: true);
-                    if (cancellationToken.IsCancellationRequested) break;
-                    
-                    if (string.IsNullOrWhiteSpace(token))
-                    {
-                        AnsiConsole.MarkupLine("[red]Key cannot be empty.[/]");
-                        continue;
-                    }
-                    Settings.Instance.RealDebridApiToken = token;
-                    break;
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(Settings.Instance.MediaRoot))
-            {
-                var root = await ReadLineWithEffectAsync("Enter [green]Movies/Shows Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
-                Settings.Instance.MediaRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
-            }
-
-            if (string.IsNullOrWhiteSpace(Settings.Instance.GamesRoot))
-            {
-                var root = await ReadLineWithEffectAsync("Enter [green]Games Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
-                Settings.Instance.GamesRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
-            }
-
-            if (string.IsNullOrWhiteSpace(Settings.Instance.OthersRoot))
-            {
-                var root = await ReadLineWithEffectAsync("Enter [green]Miscellaneous Downloads Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
-                Settings.Instance.OthersRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            var ex = new TerminationException("[red]Setup cancelled. Exiting...[/]");
-            ex.Print();
-            throw ex;
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        Settings.Save();
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[green]Configuration saved successfully![/]");
-        AnsiConsole.WriteLine();
-    }
-
-    private static async Task<bool> ConfirmAsync(string prompt, CancellationToken ct, bool defaultValue = true)
-    {
-        var choice = defaultValue ? "[[y/n]] (y)" : "[[y/n]] (n)";
-
-        while (!ct.IsCancellationRequested)
-        {
-            var result = await ReadLineWithEffectAsync($"{prompt} [green]{choice}[/]: ", ct);
-            if (ct.IsCancellationRequested) break;
-
-            if (string.IsNullOrWhiteSpace(result)) return defaultValue;
-
-            var trimmed = result.Trim().ToLowerInvariant();
-            if (trimmed is "y" or "yes") return true;
-            if (trimmed is "n" or "no") return false;
-
-            AnsiConsole.MarkupLine("[red]Please enter 'y' or 'n'.[/]");
-        }
-
-        throw new OperationCanceledException(ct);
-    }
-
-    private static async Task<string?> ReadLineWithEffectAsync(string prompt, CancellationToken ct, ConsoleColor color = ConsoleColor.White, int batchSize = 5, bool secret = false, string? defaultValue = null)
-    {
-        var displayPrompt = prompt.Trim();
-        if (!string.IsNullOrEmpty(defaultValue))
-        {
-            displayPrompt = $"{displayPrompt} [dim](leave blank for default)[/]";
-        }
-        
-        if (!displayPrompt.EndsWith(':')) displayPrompt += ":";
-        AnsiConsole.Markup(displayPrompt + " ");
-        
-        var sb = new System.Text.StringBuilder();
-
-        while (!ct.IsCancellationRequested)
-        {
-            if (Console.KeyAvailable)
-            {
-                var key = Console.ReadKey(intercept: true);
-
-                if (key.Key == ConsoleKey.Enter)
-                {
-                    AnsiConsole.WriteLine();
-                    var result = sb.ToString().Trim();
-                    return string.IsNullOrEmpty(result) ? defaultValue : result;
-                }
-
-                if (key.Key == ConsoleKey.Backspace)
-                {
-                    if (sb.Length > 0)
-                    {
-                        sb.Remove(sb.Length - 1, 1);
-                        
-                        // Handle manual wrap-around for backspace at the left edge
-                        if (Console.CursorLeft == 0)
-                        {
-                            if (Console.CursorTop > 0)
-                            {
-                                // Move to end of previous line
-                                Console.SetCursorPosition(Console.WindowWidth - 1, Console.CursorTop - 1);
-                                Console.Write(" ");
-                                Console.SetCursorPosition(Console.WindowWidth - 1, Console.CursorTop);
-                            }
-                        }
-                        else
-                        {
-                            // Standard backspace within the same line
-                            Console.Write("\b \b");
-                        }
-                    }
-                }
-                else if (!char.IsControl(key.KeyChar))
-                {
-                    sb.Append(key.KeyChar);
-                    
-                    Console.ForegroundColor = color;
-                    Console.Write(secret ? "*" : key.KeyChar);
-                    Console.ResetColor();
-
-                    if (Console.KeyAvailable && sb.Length % batchSize == 0)
-                    {
-                        // Batch delay to keep the speed high but the "filling in" effect visible
-                        await Task.Delay(1, ct);
-                    }
-                }
-            }
-            else
-            {
-                // Yield to keep UI responsive and avoid CPU pinning
-                await Task.Delay(5, ct);
-            }
-        }
-
-        return null;
-    }
 
     private void OnDownloadProgressChanged(object? sender, DownloadProgressModel e)
     {
@@ -992,6 +706,61 @@ public class TuiApp
             {
                 // Restore original name for unpaused or finished tasks
                 task.Description = $"[cyan]{Markup.Escape(originalName)}[/]";
+            }
+        }
+    }
+
+    private async Task MonitorKeypressesAsync(Task downloadLoopTask, CancellationTokenSource linkedCts, Action onSaveAndExit)
+    {
+        while (!downloadLoopTask.IsCompleted)
+        {
+            if (linkedCts.Token.IsCancellationRequested) break;
+
+            if (Console.KeyAvailable)
+            {
+                var key = Console.ReadKey(true);
+                if (key.Key == ConsoleKey.P)
+                {
+                    _downloader.TogglePause();
+                }
+                else if (key.Key == ConsoleKey.X)
+                {
+                    onSaveAndExit();
+                    var now = Environment.TickCount64;
+                    var interval = (long)Components.AppSpinner.Interval.TotalMilliseconds;
+                    var count = Components.AppSpinner.Frames.Count;
+                    var frameIdx = (int)((now / interval) % count);
+
+                    foreach (var t in _progressTasks.Values)
+                    {
+                        if (t.IsFinished) continue;
+                        _taskDisplayStatuses[t.Id] = TaskDisplayStatus.Saved;
+                        _frozenFrames[t.Id] = frameIdx;
+                        if (_taskOriginalNames.TryGetValue(t.Id, out var origName))
+                        {
+                            var truncated = origName.Length > 33 ? origName[..30] + "..." : origName;
+                            t.Description = $"[blue]SAVED [/] [cyan]{Markup.Escape(truncated)}[/]";
+                        }
+                    }
+                    linkedCts.Cancel();
+                    break;
+                }
+            }
+
+            try
+            {
+                await Task.Delay(100, linkedCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                foreach (var t in _progressTasks.Values)
+                {
+                    if (!t.IsFinished)
+                    {
+                        _taskDisplayStatuses.TryAdd(t.Id, TaskDisplayStatus.Cancelled);
+                    }
+                }
+                break;
             }
         }
     }

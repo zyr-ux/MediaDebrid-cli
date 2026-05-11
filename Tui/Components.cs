@@ -176,6 +176,163 @@ public static class Components
 
         return sb.ToString();
     }
+
+    public static async Task EnsureConfiguredAsync(CancellationToken cancellationToken)
+    {
+        if (Settings.IsConfigured()) return;
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        AnsiConsole.MarkupLine("[yellow]Initial Setup Required[/]");
+        AnsiConsole.MarkupLine("Please provide the following required configuration values:");
+        AnsiConsole.WriteLine();
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(Settings.Instance.RealDebridApiToken))
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var token = await ReadLineWithEffectAsync("Enter [green]Real-Debrid API Key[/]", cancellationToken, secret: true);
+                    if (cancellationToken.IsCancellationRequested) break;
+                    
+                    if (string.IsNullOrWhiteSpace(token))
+                    {
+                        AnsiConsole.MarkupLine("[red]Key cannot be empty.[/]");
+                        continue;
+                    }
+                    Settings.Instance.RealDebridApiToken = token;
+                    break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(Settings.Instance.MediaRoot))
+            {
+                var root = await ReadLineWithEffectAsync("Enter [green]Movies/Shows Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
+                Settings.Instance.MediaRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
+            }
+
+            if (string.IsNullOrWhiteSpace(Settings.Instance.GamesRoot))
+            {
+                var root = await ReadLineWithEffectAsync("Enter [green]Games Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
+                Settings.Instance.GamesRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
+            }
+
+            if (string.IsNullOrWhiteSpace(Settings.Instance.OthersRoot))
+            {
+                var root = await ReadLineWithEffectAsync("Enter [green]Miscellaneous Downloads Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
+                Settings.Instance.OthersRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            var ex = new TerminationException("[red]Setup cancelled. Exiting...[/]");
+            ex.Print();
+            throw ex;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        Settings.Save();
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[green]Configuration saved successfully![/]");
+        AnsiConsole.WriteLine();
+    }
+
+    public static async Task<bool> ConfirmAsync(string prompt, CancellationToken ct, bool defaultValue = true)
+    {
+        var choice = defaultValue ? "[[y/n]] (y)" : "[[y/n]] (n)";
+
+        while (!ct.IsCancellationRequested)
+        {
+            var result = await ReadLineWithEffectAsync($"{prompt} [green]{choice}[/]: ", ct);
+            if (ct.IsCancellationRequested) break;
+
+            if (string.IsNullOrWhiteSpace(result)) return defaultValue;
+
+            var trimmed = result.Trim().ToLowerInvariant();
+            if (trimmed is "y" or "yes") return true;
+            if (trimmed is "n" or "no") return false;
+
+            AnsiConsole.MarkupLine("[red]Please enter 'y' or 'n'.[/]");
+        }
+
+        throw new OperationCanceledException(ct);
+    }
+
+    public static async Task<string?> ReadLineWithEffectAsync(string prompt, CancellationToken ct, ConsoleColor color = ConsoleColor.White, int batchSize = 5, bool secret = false, string? defaultValue = null)
+    {
+        var displayPrompt = prompt.Trim();
+        if (!string.IsNullOrEmpty(defaultValue))
+        {
+            displayPrompt = $"{displayPrompt} [dim](leave blank for default)[/]";
+        }
+        
+        if (!displayPrompt.EndsWith(':')) displayPrompt += ":";
+        AnsiConsole.Markup(displayPrompt + " ");
+        
+        var sb = new System.Text.StringBuilder();
+
+        while (!ct.IsCancellationRequested)
+        {
+            if (Console.KeyAvailable)
+            {
+                var key = Console.ReadKey(intercept: true);
+
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    AnsiConsole.WriteLine();
+                    var result = sb.ToString().Trim();
+                    return string.IsNullOrEmpty(result) ? defaultValue : result;
+                }
+
+                if (key.Key == ConsoleKey.Backspace)
+                {
+                    if (sb.Length > 0)
+                    {
+                        sb.Remove(sb.Length - 1, 1);
+                        
+                        // Handle manual wrap-around for backspace at the left edge
+                        if (Console.CursorLeft == 0)
+                        {
+                            if (Console.CursorTop > 0)
+                            {
+                                // Move to end of previous line
+                                Console.SetCursorPosition(Console.WindowWidth - 1, Console.CursorTop - 1);
+                                Console.Write(" ");
+                                Console.SetCursorPosition(Console.WindowWidth - 1, Console.CursorTop);
+                            }
+                        }
+                        else
+                        {
+                            // Standard backspace within the same line
+                            Console.Write("\b \b");
+                        }
+                    }
+                }
+                else if (!char.IsControl(key.KeyChar))
+                {
+                    sb.Append(key.KeyChar);
+                    
+                    Console.ForegroundColor = color;
+                    Console.Write(secret ? "*" : key.KeyChar);
+                    Console.ResetColor();
+
+                    if (Console.KeyAvailable && sb.Length % batchSize == 0)
+                    {
+                        // Batch delay to keep the speed high but the "filling in" effect visible
+                        await Task.Delay(1, ct);
+                    }
+                }
+            }
+            else
+            {
+                // Yield to keep UI responsive and avoid CPU pinning
+                await Task.Delay(5, ct);
+            }
+        }
+
+        return null;
+    }
 }
 
 internal sealed class CustomTransferSpeedColumn(ConcurrentDictionary<int, double> speeds) : ProgressColumn

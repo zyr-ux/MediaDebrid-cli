@@ -183,6 +183,77 @@ public class Downloader
         return queuedDownloads;
     }
 
+    public async Task DownloadQueueAsync(
+        IEnumerable<(UnrestrictResponse Unrestricted, ResumeMetadata? ResumeData, string DestPath)> queue,
+        string magnet,
+        string? seasonOverride,
+        string? episodeOverride,
+        MediaMetadata resolved,
+        HashSet<string>? existingEpisodeKeys,
+        HashSet<int> selectedSeasons,
+        ConcurrentBag<string> activePaths,
+        Func<UnrestrictResponse, string, string, ResumeMetadata, Task> onTaskStart,
+        Func<string, Task> onTaskComplete,
+        Func<string, Exception, Task> onTaskError,
+        CancellationToken cancellationToken)
+    {
+        foreach (var item in queue)
+        {
+            var (unrestricted, resumeData, destPath) = item;
+            var currentResumeData = resumeData;
+
+            if (cancellationToken.IsCancellationRequested) break;
+
+            try
+            {
+                var filename = unrestricted.Filename;
+                var tempPath = destPath + ".mdebrid";
+                
+                if (File.Exists(destPath))
+                {
+                    continue;
+                }
+
+                if (resolved.Type == "show" && Utils.IsEpisodeExisting(filename, existingEpisodeKeys, selectedSeasons))
+                {
+                    continue;
+                }
+
+                var progressKey = destPath;
+                activePaths.Add(tempPath);
+
+                var rootPath = Settings.GetRootPathForType(resolved.Type);
+                
+                if (currentResumeData == null)
+                {
+                    currentResumeData = new ResumeMetadata
+                    {
+                        MagnetUri = magnet,
+                        FileId = unrestricted.Id,
+                        TotalSize = 0,
+                        SeasonOverride = seasonOverride,
+                        EpisodeOverride = episodeOverride
+                    };
+                }
+
+                await onTaskStart(unrestricted, destPath, progressKey, currentResumeData);
+
+                await DownloadFileAsync(unrestricted.Download, destPath, rootPath, progressKey, cancellationToken, currentResumeData);
+
+                await onTaskComplete(progressKey);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                await onTaskError(destPath, ex);
+                throw new DownloadException($"Download failed: {ex.Message}", ex);
+            }
+        }
+    }
+
     private async Task DownloadSegmentedAsync(string url, string destPath, int segments, string progressKey, string? rootPath = null, CancellationToken cancellationToken = default, ResumeMetadata? resumeData = null)
     {
         var headReq = new HttpRequestMessage(HttpMethod.Head, url);
