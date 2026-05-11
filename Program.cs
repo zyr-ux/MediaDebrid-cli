@@ -23,7 +23,7 @@ internal sealed class LogoHelpAction(HelpAction defaultHelp) : SynchronousComman
 
         if (parseResult.CommandResult.Command is RootCommand)
         {
-            TuiApp.ShowLogo();
+            Components.ShowLogo();
             Console.Write(Utils.GetRootHelpDescription());
             return 0;
         }
@@ -93,7 +93,7 @@ internal static class Program
         var listCommand = new Command("list", "List all current configurations");
         listCommand.SetAction(_ =>
         {
-            TuiApp.ListConfiguration();
+            Components.ListConfiguration();
         });
 
         rootCommand.Subcommands.Add(listCommand);
