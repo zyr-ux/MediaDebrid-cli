@@ -24,7 +24,7 @@ internal sealed class LogoHelpAction(HelpAction defaultHelp) : SynchronousComman
         if (parseResult.CommandResult.Command is RootCommand)
         {
             Components.ShowLogo();
-            Console.Write(Utils.GetRootHelpDescription());
+            Console.Write(Components.GetRootHelpDescription());
             return 0;
         }
 
@@ -51,7 +51,7 @@ internal static class Program
 
         var app = new TuiApp();
 
-        var rootCommand = new RootCommand(Utils.GetRootHelpDescription());
+        var rootCommand = new RootCommand(Components.GetRootHelpDescription());
 
 
         // ── unres Command ──────────────────────────────────────────────────
@@ -84,7 +84,26 @@ internal static class Program
 
         setCommand.SetAction(parseResult =>
         {
-            TuiApp.SetConfigurationValue(parseResult.GetValue(keyArg)!, parseResult.GetValue(valueArg)!);
+            var key = parseResult.GetValue(keyArg)!;
+            var value = parseResult.GetValue(valueArg)!;
+            var (success, message, _) = Utils.UpdateConfiguration(key, value);
+            if (success)
+            {
+                AnsiConsole.MarkupLine($"[green]{message}[/]");
+            }
+            else
+            {
+                AnsiConsole.MarkupLine($"[red]{message}[/]");
+                if (message.Contains("not found"))
+                {
+                    AnsiConsole.MarkupLine("Available keys:");
+                    var metadata = Utils.GetConfigurationMetadata();
+                    foreach (var (propName, typeName, _) in metadata)
+                    {
+                        AnsiConsole.MarkupLine($"- [cyan]{propName}[/] ({typeName})");
+                    }
+                }
+            }
         });
 
         rootCommand.Subcommands.Add(setCommand);

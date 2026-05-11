@@ -82,6 +82,18 @@ public class RealDebridClient
         return await HandleResponseAsync<UnrestrictResponse>(res, cancellationToken);
     }
 
+    public async Task<List<UnrestrictResponse>> UnrestrictLinksAsync(IEnumerable<string> links, CancellationToken cancellationToken = default)
+    {
+        var responses = new List<UnrestrictResponse>();
+        foreach (var link in links)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            var unrestricted = await UnrestrictLinkAsync(link, cancellationToken);
+            responses.Add(unrestricted);
+        }
+        return responses;
+    }
+
     public async Task DeleteTorrentAsync(string torrentId, CancellationToken cancellationToken = default)
     {
         var res = await _client.DeleteAsync($"{BaseUrl}/torrents/delete/{torrentId}", cancellationToken);

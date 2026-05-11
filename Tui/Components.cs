@@ -3,6 +3,7 @@ using MediaDebrid_cli.Models;
 using MediaDebrid_cli.Services;
 using Spectre.Console;
 using Spectre.Console.Rendering;
+using System.Text;
 
 namespace MediaDebrid_cli.Tui;
 
@@ -144,6 +145,36 @@ public static class Components
         AnsiConsole.Write(table);
         AnsiConsole.MarkupLine("[grey] Use 'mediadebrid set <key> <value>' to modify these settings[/]");
         AnsiConsole.WriteLine();
+    }
+
+    public static string GetRootHelpDescription()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Magnet → Media Downloader");
+        sb.AppendLine();
+        sb.AppendLine("USAGE");
+        sb.AppendLine("  mediadebrid-cli <command> [options]");
+        sb.AppendLine();
+        sb.AppendLine("COMMANDS");
+        sb.AppendLine($"  {"resume <path>",-30} - Resume download from .mdebrid file");
+        sb.AppendLine($"  {"set <key> <value>",-30} - Set a configuration value");
+        sb.AppendLine($"  {"list",-30} - Show current configuration");
+        sb.AppendLine();
+        sb.AppendLine("OPTIONS");
+        sb.AppendLine($"  {"--version",-30} - Show version");
+        sb.AppendLine($"  {"-h, --help",-30} - Show help");
+        sb.AppendLine();
+        sb.AppendLine();
+        sb.AppendLine("CONFIGURATION (used with `set`)");
+        
+        var metadata = Utils.GetConfigurationMetadata();
+        foreach (var (key, type, desc) in metadata)
+        {
+            if (key.Contains("tmdb", StringComparison.OrdinalIgnoreCase) || key.Contains("rawg", StringComparison.OrdinalIgnoreCase)) continue;
+            sb.AppendLine($"  {key,-30} - {desc}");
+        }
+
+        return sb.ToString();
     }
 }
 

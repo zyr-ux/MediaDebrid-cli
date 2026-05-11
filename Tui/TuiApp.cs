@@ -372,82 +372,17 @@ public class TuiApp
 
                 try
                 {
-                    if (Settings.Instance.SkipExistingEpisodes)
+                    var validation = Utils.ValidateExistingFiles(resolved, info, selectedSeasons, seasonOverride, episodeOverride);
+                    existingEpisodeKeys = validation.ExistingEpisodeKeys;
+                    
+                    if (validation.AllSkipped)
                     {
-                        if (resolved.Type == "show")
-                        {
-                            var seasonsToCheck = selectedSeasons;
-
-                            existingEpisodeKeys = [];
-                            foreach (var s in seasonsToCheck)
-                            {
-                                var seasonDir = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, s);
-                                var existingInSeason = Utils.GetExistingEpisodes(seasonDir);
-                                foreach (var ep in existingInSeason)
-                                {
-                                    existingEpisodeKeys.Add(Utils.BuildEpisodeKey(s, ep));
-                                }
-                            }
-
-                            if (existingEpisodeKeys.Count > 0)
-                            {
-                                var epRange = Utils.ParseRange(episodeOverride);
-                                var sRange = Utils.ParseRange(seasonOverride);
-
-                                // Find all episodes in the torrent that match our selection criteria
-                                var episodesInTorrent = info.Files
-                                    .Where(f => {
-                                        if (f.Bytes < 50_000_000 && epRange.Count == 0) return false;
-                                        var meta = _metadataResolver.ParseName(f.Path);
-                                        var fileSeasons = Utils.ParseRange(meta.Season);
-                                        return sRange.Count == 0 || fileSeasons.Any(s => sRange.Contains(s));
-                                    })
-                                    .SelectMany(f => {
-                                        var meta = _metadataResolver.ParseName(f.Path);
-                                        var fileEpisodes = Utils.ParseRange(meta.Episode);
-                                        var fileSeasons = Utils.ParseRange(meta.Season);
-                                        var s = fileSeasons.FirstOrDefault();
-                                        if (s == 0 && sRange.Count == 1) s = sRange.First();
-                                        if (s == 0 && seasonsToCheck.Count == 1) s = seasonsToCheck.First();
-                                        return fileEpisodes.Select(e => Utils.BuildEpisodeKey(s > 0 ? s : 1, e));
-                                    })
-                                    .ToHashSet();
-
-                                if (episodesInTorrent.Count > 0 && episodesInTorrent.All(key => existingEpisodeKeys.Contains(key)))
-                                {
-                                    var scope = (selectedSeasons.Count > 1 && string.IsNullOrEmpty(episodeOverride))
-                                        ? "All seasons and episodes of this show"
-                                        : (string.IsNullOrEmpty(episodeOverride) ? "All episodes of this show" : $"All selected episodes of this show ({episodeOverride})");
-                                    throw new TerminationException($"[bold red]{scope} already exist in your local library.[/]");
-                                }
-
-                                // Count only the episodes that are actually in the torrent AND in the library
-                                var skippedCount = episodesInTorrent.Count(key => existingEpisodeKeys.Contains(key));
-                                if (skippedCount > 0)
-                                {
-                                    AnsiConsole.WriteLine();
-                                    AnsiConsole.MarkupLine($"[yellow]X[/] Found [cyan]{skippedCount}[/] existing episode{(skippedCount == 1 ? "" : "s")} in local library. {(skippedCount == 1 ? "It" : "They")} will be skipped.");
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // Movie, Game, Other logic
-                            var largestFile = info.Files.OrderByDescending(f => f.Bytes).FirstOrDefault();
-                            if (largestFile != null)
-                            {
-                                var destPath = PathGenerator.GetDestinationPath(resolved.Type, resolved.Title, resolved.Year, largestFile.Path, seasonOverride);
-                                if (File.Exists(destPath))
-                                {
-                                    var typeLabel = resolved.Type switch {
-                                        "movie" => "Movie",
-                                        "game" => "Game",
-                                        _ => "File"
-                                    };
-                                    throw new TerminationException($"[bold red]{typeLabel} \"{resolved.Title}\" already exists in your local library.[/]");
-                                }
-                            }
-                        }
+                        throw new TerminationException(validation.ErrorMessage);
+                    }
+                    if (!string.IsNullOrEmpty(validation.WarnMessage))
+                    {
+                        AnsiConsole.WriteLine();
+                        AnsiConsole.MarkupLine(validation.WarnMessage);
                     }
 
                     if (info.Status == "waiting_files_selection")
@@ -556,12 +491,9 @@ public class TuiApp
             await AnsiConsole.Status().StartAsync("[yellow]Unrestricting links...[/]", async ctx =>
             {
                 ctx.Spinner(Spinner.Known.Arc);
-                foreach (var link in info.Links)
+                var unrestrictedLinks = await GetClient().UnrestrictLinksAsync(info.Links, cancellationToken);
+                foreach (var unrestricted in unrestrictedLinks)
                 {
-                    if (cancellationToken.IsCancellationRequested) break;
-                    
-                    var unrestricted = await GetClient().UnrestrictLinkAsync(link, cancellationToken: cancellationToken);
-                    
                     AnsiConsole.MarkupLine($"[cyan]{Markup.Escape(unrestricted.Filename)}[/]");
                     AnsiConsole.MarkupLine($"[white]{unrestricted.Download}[/]");
                     AnsiConsole.WriteLine();
@@ -585,11 +517,10 @@ public class TuiApp
         await AnsiConsole.Status().StartAsync("[yellow]Preparing downloads...[/]", async ctx =>
         {
             ctx.Spinner(Spinner.Known.Arc);
-            foreach (var link in info.Links)
+            var unrestrictedLinks = await GetClient().UnrestrictLinksAsync(info.Links, linkedCts.Token);
+            foreach (var unrestricted in unrestrictedLinks)
             {
                 if (linkedCts.Token.IsCancellationRequested) break;
-                
-                var unrestricted = await GetClient().UnrestrictLinkAsync(link, cancellationToken: linkedCts.Token);
                 var filename = unrestricted.Filename;
                 var destPath = PathGenerator.GetDestinationPath(resolved.Type, resolved.Title, resolved.Year, filename, seasonOverride);
 
@@ -597,23 +528,7 @@ public class TuiApp
                 if (File.Exists(destPath)) continue;
 
                 // Skip if it's an existing episode (for shows)
-                if (resolved.Type == "show" && Settings.Instance.SkipExistingEpisodes)
-                {
-                    var meta = _metadataResolver.ParseName(filename);
-                    var episodes = Utils.ParseRange(meta.Episode);
-                    if (episodes.Count > 0 && existingEpisodeKeys != null)
-                    {
-                        var seasons = Utils.ParseRange(meta.Season);
-                        var sNum = seasons.Count > 0 ? (int?)seasons.First() : null;
-                        
-                        if (!sNum.HasValue && selectedSeasons.Count == 1)
-                        {
-                            sNum = selectedSeasons.First();
-                        }
-
-                        if (sNum.HasValue && episodes.Any(e => existingEpisodeKeys.Contains(Utils.BuildEpisodeKey(sNum.Value, e)))) continue;
-                    }
-                }
+                if (resolved.Type == "show" && Utils.IsEpisodeExisting(filename, existingEpisodeKeys, selectedSeasons)) continue;
 
                 var tempPath = destPath + ".mdebrid";
 
@@ -704,25 +619,9 @@ public class TuiApp
                                     continue;
                                 }
 
-                                if (resolved.Type == "show" && Settings.Instance.SkipExistingEpisodes)
+                                if (resolved.Type == "show" && Utils.IsEpisodeExisting(filename, existingEpisodeKeys, selectedSeasons))
                                 {
-                                    var meta = _metadataResolver.ParseName(filename);
-                                    var episodes = Utils.ParseRange(meta.Episode);
-                                    if (episodes.Count > 0 && existingEpisodeKeys != null)
-                                    {
-                                        var seasons = Utils.ParseRange(meta.Season);
-                                        var sNum = seasons.Count > 0 ? (int?)seasons.First() : null;
-
-                                        if (!sNum.HasValue && selectedSeasons.Count == 1)
-                                        {
-                                            sNum = selectedSeasons.First();
-                                        }
-
-                                        if (sNum.HasValue && episodes.Any(e => existingEpisodeKeys.Contains(Utils.BuildEpisodeKey(sNum.Value, e))))
-                                        {
-                                            continue;
-                                        }
-                                    }
+                                    continue;
                                 }
 
                                 var progressKey = destPath;
@@ -1035,28 +934,6 @@ public class TuiApp
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[green]Configuration saved successfully![/]");
         AnsiConsole.WriteLine();
-    }
-
-    public static void SetConfigurationValue(string key, string value)
-    {
-        var (success, message, _) = Utils.UpdateConfiguration(key, value);
-        if (success)
-        {
-            AnsiConsole.MarkupLine($"[green]{message}[/]");
-        }
-        else
-        {
-            AnsiConsole.MarkupLine($"[red]{message}[/]");
-            if (message.Contains("not found"))
-            {
-                AnsiConsole.MarkupLine("Available keys:");
-                var metadata = Utils.GetConfigurationMetadata();
-                foreach (var (propName, typeName, _) in metadata)
-                {
-                    AnsiConsole.MarkupLine($"- [cyan]{propName}[/] ({typeName})");
-                }
-            }
-        }
     }
 
     private static async Task<bool> ConfirmAsync(string prompt, CancellationToken ct, bool defaultValue = true)

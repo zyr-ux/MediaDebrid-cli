@@ -150,35 +150,7 @@ public static class Utils
         return metadata;
     }
 
-    public static string GetRootHelpDescription()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("Magnet → Media Downloader");
-        sb.AppendLine();
-        sb.AppendLine("USAGE");
-        sb.AppendLine("  mediadebrid-cli <command> [options]");
-        sb.AppendLine();
-        sb.AppendLine("COMMANDS");
-        sb.AppendLine($"  {"resume <path>",-30} - Resume download from .mdebrid file");
-        sb.AppendLine($"  {"set <key> <value>",-30} - Set a configuration value");
-        sb.AppendLine($"  {"list",-30} - Show current configuration");
-        sb.AppendLine();
-        sb.AppendLine("OPTIONS");
-        sb.AppendLine($"  {"--version",-30} - Show version");
-        sb.AppendLine($"  {"-h, --help",-30} - Show help");
-        sb.AppendLine();
-        sb.AppendLine();
-        sb.AppendLine("CONFIGURATION (used with `set`)");
-        
-        var metadata = GetConfigurationMetadata();
-        foreach (var (key, type, desc) in metadata)
-        {
-            if (key.Contains("tmdb", StringComparison.OrdinalIgnoreCase) || key.Contains("rawg", StringComparison.OrdinalIgnoreCase)) continue;
-            sb.AppendLine($"  {key,-30} - {desc}");
-        }
 
-        return sb.ToString();
-    }
 
     private static readonly string[] VideoExtensions = { ".mkv", ".mp4", ".avi", ".m4v", ".mov", ".ts", ".wmv" };
 
@@ -214,5 +186,115 @@ public static class Utils
         if (unitIndex >= units.Length) unitIndex = units.Length - 1;
         double size = bytes / Math.Pow(1024, unitIndex);
         return $"{size:F2} {units[unitIndex]}";
+    }
+
+    public static (HashSet<string>? ExistingEpisodeKeys, int SkippedCount, bool AllSkipped, string ErrorMessage, string? WarnMessage) ValidateExistingFiles(
+        MediaMetadata resolved, 
+        TorrentInfo info, 
+        HashSet<int> selectedSeasons, 
+        string? seasonOverride, 
+        string? episodeOverride)
+    {
+        if (!Settings.Instance.SkipExistingEpisodes) return (null, 0, false, string.Empty, null);
+
+        if (resolved.Type == "show")
+        {
+            var seasonsToCheck = selectedSeasons;
+            var existingEpisodeKeys = new HashSet<string>();
+            foreach (var s in seasonsToCheck)
+            {
+                var seasonDir = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, s);
+                var existingInSeason = GetExistingEpisodes(seasonDir);
+                foreach (var ep in existingInSeason)
+                {
+                    existingEpisodeKeys.Add(BuildEpisodeKey(s, ep));
+                }
+            }
+
+            if (existingEpisodeKeys.Count > 0)
+            {
+                var epRange = ParseRange(episodeOverride);
+                var sRange = ParseRange(seasonOverride);
+                var resolver = new MetadataResolver();
+
+                var episodesInTorrent = info.Files
+                    .Where(f => {
+                        if (f.Bytes < 50_000_000 && epRange.Count == 0) return false;
+                        var meta = resolver.ParseName(f.Path);
+                        var fileSeasons = ParseRange(meta.Season);
+                        return sRange.Count == 0 || fileSeasons.Any(s => sRange.Contains(s));
+                    })
+                    .SelectMany(f => {
+                        var meta = resolver.ParseName(f.Path);
+                        var fileEpisodes = ParseRange(meta.Episode);
+                        var fileSeasons = ParseRange(meta.Season);
+                        var s = fileSeasons.FirstOrDefault();
+                        if (s == 0 && sRange.Count == 1) s = sRange.First();
+                        if (s == 0 && seasonsToCheck.Count == 1) s = seasonsToCheck.First();
+                        return fileEpisodes.Select(e => BuildEpisodeKey(s > 0 ? s : 1, e));
+                    })
+                    .ToHashSet();
+
+                if (episodesInTorrent.Count > 0 && episodesInTorrent.All(key => existingEpisodeKeys.Contains(key)))
+                {
+                    var scope = (selectedSeasons.Count > 1 && string.IsNullOrEmpty(episodeOverride))
+                        ? "All seasons and episodes of this show"
+                        : (string.IsNullOrEmpty(episodeOverride) ? "All episodes of this show" : $"All selected episodes of this show ({episodeOverride})");
+                    return (existingEpisodeKeys, 0, true, $"[bold red]{scope} already exist in your local library.[/]", null);
+                }
+
+                var skippedCount = episodesInTorrent.Count(key => existingEpisodeKeys.Contains(key));
+                string? warnMessage = null;
+                if (skippedCount > 0)
+                {
+                    warnMessage = $"[yellow]X[/] Found [cyan]{skippedCount}[/] existing episode{(skippedCount == 1 ? "" : "s")} in local library. {(skippedCount == 1 ? "It" : "They")} will be skipped.";
+                }
+
+                return (existingEpisodeKeys, skippedCount, false, string.Empty, warnMessage);
+            }
+            return (existingEpisodeKeys, 0, false, string.Empty, null);
+        }
+        else
+        {
+            var largestFile = info.Files.OrderByDescending(f => f.Bytes).FirstOrDefault();
+            if (largestFile != null)
+            {
+                var destPath = PathGenerator.GetDestinationPath(resolved.Type, resolved.Title, resolved.Year, largestFile.Path, seasonOverride);
+                if (File.Exists(destPath))
+                {
+                    var typeLabel = resolved.Type switch {
+                        "movie" => "Movie",
+                        "game" => "Game",
+                        _ => "File"
+                    };
+                    return (null, 0, true, $"[bold red]{typeLabel} \"{resolved.Title}\" already exists in your local library.[/]", null);
+                }
+            }
+            return (null, 0, false, string.Empty, null);
+        }
+    }
+
+    public static bool IsEpisodeExisting(string filename, HashSet<string>? existingEpisodeKeys, HashSet<int> selectedSeasons)
+    {
+        if (existingEpisodeKeys == null || !Settings.Instance.SkipExistingEpisodes) return false;
+
+        var resolver = new MetadataResolver();
+        var meta = resolver.ParseName(filename);
+        var episodes = ParseRange(meta.Episode);
+        if (episodes.Count > 0)
+        {
+            var seasons = ParseRange(meta.Season);
+            var sNum = seasons.Count > 0 ? (int?)seasons.First() : null;
+            if (!sNum.HasValue && selectedSeasons.Count == 1)
+            {
+                sNum = selectedSeasons.First();
+            }
+
+            if (sNum.HasValue && episodes.Any(e => existingEpisodeKeys.Contains(BuildEpisodeKey(sNum.Value, e))))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 }
