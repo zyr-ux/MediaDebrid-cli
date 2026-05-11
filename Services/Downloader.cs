@@ -144,6 +144,45 @@ public class Downloader
         }
     }
 
+    public List<(UnrestrictResponse Unrestricted, ResumeMetadata? ResumeData, string DestPath)> PrepareDownloadQueue(
+        IEnumerable<UnrestrictResponse> unrestrictedLinks,
+        MediaMetadata resolved,
+        string magnet,
+        string? seasonOverride,
+        HashSet<string>? existingEpisodeKeys,
+        HashSet<int> selectedSeasons,
+        CancellationToken cancellationToken = default)
+    {
+        var queuedDownloads = new List<(UnrestrictResponse Unrestricted, ResumeMetadata? ResumeData, string DestPath)>();
+
+        foreach (var unrestricted in unrestrictedLinks)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            var filename = unrestricted.Filename;
+            var destPath = PathGenerator.GetDestinationPath(resolved.Type, resolved.Title, resolved.Year, filename, seasonOverride);
+
+            if (File.Exists(destPath)) continue;
+
+            if (resolved.Type == "show" && Utils.IsEpisodeExisting(filename, existingEpisodeKeys, selectedSeasons)) continue;
+
+            var tempPath = destPath + ".mdebrid";
+            ResumeMetadata? resumeData = null;
+
+            if (File.Exists(tempPath))
+            {
+                resumeData = ReadResumeMetadata(tempPath);
+                if (resumeData == null || resumeData.MagnetUri != magnet)
+                {
+                    resumeData = null;
+                }
+            }
+            
+            queuedDownloads.Add((unrestricted, resumeData, destPath));
+        }
+
+        return queuedDownloads;
+    }
+
     private async Task DownloadSegmentedAsync(string url, string destPath, int segments, string progressKey, string? rootPath = null, CancellationToken cancellationToken = default, ResumeMetadata? resumeData = null)
     {
         var headReq = new HttpRequestMessage(HttpMethod.Head, url);

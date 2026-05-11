@@ -35,4 +35,19 @@ public static class MagnetParser
             return match.Groups[1].Value;
         }
     }
+
+    /// <summary>Validates a magnet link.</summary>
+    public static (bool IsValid, string? ErrorMessage) Validate(string? magnet)
+    {
+        if (string.IsNullOrWhiteSpace(magnet))
+            return (false, "Magnet link cannot be empty.");
+
+        if (!magnet.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase))
+            return (false, "Invalid magnet link format. Must start with 'magnet:?'.");
+
+        if (ExtractHash(magnet) == null)
+            return (false, "Invalid magnet link: Missing BTIH hash (xt=urn:btih:).");
+
+        return (true, null);
+    }
 }

@@ -55,6 +55,68 @@ public static class Utils
 
     public static string BuildEpisodeKey(int season, int episode) => $"{season}:{episode}";
 
+    public static List<int> GetAvailableSeasons(IEnumerable<TorrentFile> files, MetadataResolver resolver)
+    {
+        return files
+            .Select(f =>
+            {
+                var meta = resolver.ParseName(f.Path);
+                var seasons = ParseRange(meta.Season);
+                return seasons.Count > 0 ? (int?)seasons.First() : null;
+            })
+            .Where(s => s.HasValue)
+            .Select(s => s!.Value)
+            .Distinct()
+            .OrderBy(s => s)
+            .ToList();
+    }
+
+    public static List<int> GetAvailableEpisodes(IEnumerable<TorrentFile> files, HashSet<int> selectedSeasons, MetadataResolver resolver)
+    {
+        return files
+            .Where(f =>
+            {
+                if (f.Bytes < 50_000_000) return false;
+                var meta = resolver.ParseName(f.Path);
+                var fileSeasons = ParseRange(meta.Season);
+                return selectedSeasons.Count == 0 || fileSeasons.Any(s => selectedSeasons.Contains(s));
+            })
+            .SelectMany(f =>
+            {
+                var meta = resolver.ParseName(f.Path);
+                return ParseRange(meta.Episode);
+            })
+            .Distinct()
+            .OrderBy(e => e)
+            .ToList();
+    }
+
+    public static HashSet<int> DetermineSelectedSeasons(IEnumerable<TorrentFile> files, string? seasonOverride, string? resolvedSeason, MetadataResolver resolver)
+    {
+        var selectedSeasons = ParseRange(seasonOverride);
+        if (selectedSeasons.Count == 0)
+        {
+            selectedSeasons = files
+                .Select(f =>
+                {
+                    var meta = resolver.ParseName(f.Path);
+                    var seasons = ParseRange(meta.Season);
+                    return seasons.Any() ? (int?)seasons.First() : null;
+                })
+                .Where(s => s.HasValue)
+                .Select(s => s!.Value)
+                .ToHashSet();
+
+            if (selectedSeasons.Count == 0 && !string.IsNullOrEmpty(resolvedSeason))
+            {
+                selectedSeasons = ParseRange(resolvedSeason);
+            }
+
+            if (selectedSeasons.Count == 0) selectedSeasons.Add(1);
+        }
+        return selectedSeasons;
+    }
+
     public static string[] GetSelectedFiles(List<TorrentFile> files, string? seasonOverride, string? episodeOverride, HashSet<string>? existingEpisodeKeys = null)
     {
         var sRange = ParseRange(seasonOverride);

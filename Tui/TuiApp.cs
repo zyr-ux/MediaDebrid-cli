@@ -84,25 +84,11 @@ public class TuiApp
                     ctx.Spinner(Spinner.Known.Arc);
                     ctx.SpinnerStyle(Style.Parse("yellow"));
 
-                    matched = await GetClient().FindTorrentByHashAsync(hash, cancellationToken);
-                    
-                    if (matched == null)
-                    {
-                        ctx.Status("[yellow]Adding magnet to Real-Debrid...[/]");
-                        var addRes = await GetClient().AddMagnetAsync(magnet, cancellationToken);
-                        torrentId = addRes.Id;
-                        newlyAdded = true;
-                        
-                        var cacheInfo = await GetClient().GetTorrentInfoAsync(torrentId, cancellationToken);
-                        isCached = cacheInfo.Status == "downloaded";
-                        
-                        matched = new TorrentItem { Id = torrentId, Status = cacheInfo.Status, Hash = hash };
-                    }
-                    else
-                    {
-                        torrentId = matched.Id;
-                        isCached = matched.Status == "downloaded" || matched.Status == "waiting_files_selection";
-                    }
+                    var result = await GetClient().AddMagnetAndCheckCacheAsync(magnet, hash, cancellationToken);
+                    torrentId = result.TorrentId;
+                    matched = result.MatchedItem;
+                    isCached = result.IsCached;
+                    newlyAdded = result.NewlyAdded;
                 });
         }
         catch (RealDebridApiException) { throw; }
@@ -191,18 +177,7 @@ public class TuiApp
         List<int> seasonsInTorrent = [];
         if (resolved.Type == "show")
         {
-            seasonsInTorrent = info.Files
-                .Select(f =>
-                {
-                    var meta = _metadataResolver.ParseName(f.Path);
-                    var seasons = Utils.ParseRange(meta.Season);
-                    return seasons.Count > 0 ? (int?)seasons.First() : null;
-                })
-                .Where(s => s.HasValue)
-                .Select(s => s!.Value)
-                .Distinct()
-                .OrderBy(s => s)
-                .ToList();
+            seasonsInTorrent = Utils.GetAvailableSeasons(info.Files, _metadataResolver);
 
             if (seasonsInTorrent.Count > 1 && string.IsNullOrEmpty(seasonOverride))
             {
@@ -265,22 +240,7 @@ public class TuiApp
         if (resolved.Type == "show" && string.IsNullOrEmpty(episodeOverride))
         {
             var sRange = Utils.ParseRange(seasonOverride);
-            var episodesInTorrent = info.Files
-                .Where(f =>
-                {
-                    if (f.Bytes < 50_000_000) return false;
-                    var meta = _metadataResolver.ParseName(f.Path);
-                    var fileSeasons = Utils.ParseRange(meta.Season);
-                    return sRange.Count == 0 || fileSeasons.Any(s => sRange.Contains(s));
-                })
-                .SelectMany(f =>
-                {
-                    var meta = _metadataResolver.ParseName(f.Path);
-                    return Utils.ParseRange(meta.Episode);
-                })
-                .Distinct()
-                .OrderBy(e => e)
-                .ToList();
+            var episodesInTorrent = Utils.GetAvailableEpisodes(info.Files, sRange, _metadataResolver);
 
             if (episodesInTorrent.Count == 1)
             {
@@ -345,23 +305,7 @@ public class TuiApp
         var selectedSeasons = Utils.ParseRange(seasonOverride);
         if (resolved.Type == "show" && selectedSeasons.Count == 0)
         {
-            selectedSeasons = info.Files
-                .Select(f =>
-                {
-                    var meta = _metadataResolver.ParseName(f.Path);
-                    var seasons = Utils.ParseRange(meta.Season);
-                    return seasons.Any() ? (int?)seasons.First() : null;
-                })
-                .Where(s => s.HasValue)
-                .Select(s => s!.Value)
-                .ToHashSet();
-
-            if (selectedSeasons.Count == 0 && !string.IsNullOrEmpty(resolved.Season))
-            {
-                selectedSeasons = Utils.ParseRange(resolved.Season);
-            }
-
-            if (selectedSeasons.Count == 0) selectedSeasons.Add(1);
+            selectedSeasons = Utils.DetermineSelectedSeasons(info.Files, seasonOverride, resolved.Season, _metadataResolver);
         }
 
         await AnsiConsole.Status()
@@ -436,12 +380,7 @@ public class TuiApp
                     {
                         try
                         {
-                            while (!pollCts.Token.IsCancellationRequested)
-                            {
-                                info = await GetClient().GetTorrentInfoAsync(torrentId, pollCts.Token);
-                                if (info.Status == "downloaded" || info.Status == "dead") return;
-                                await Task.Delay(5000, pollCts.Token);
-                            }
+                            info = await GetClient().WaitForStatusAsync(torrentId, ["downloaded", "dead"], pollCts.Token, 5000);
                         }
                         catch (OperationCanceledException) { }
                     }, pollCts.Token);
@@ -518,37 +457,14 @@ public class TuiApp
         {
             ctx.Spinner(Spinner.Known.Arc);
             var unrestrictedLinks = await GetClient().UnrestrictLinksAsync(info.Links, linkedCts.Token);
-            foreach (var unrestricted in unrestrictedLinks)
-            {
-                if (linkedCts.Token.IsCancellationRequested) break;
-                var filename = unrestricted.Filename;
-                var destPath = PathGenerator.GetDestinationPath(resolved.Type, resolved.Title, resolved.Year, filename, seasonOverride);
-
-                // Skip if file already exists locally
-                if (File.Exists(destPath)) continue;
-
-                // Skip if it's an existing episode (for shows)
-                if (resolved.Type == "show" && Utils.IsEpisodeExisting(filename, existingEpisodeKeys, selectedSeasons)) continue;
-
-                var tempPath = destPath + ".mdebrid";
-
-                // Resume detection
-                ResumeMetadata? resumeData = null;
-                if (File.Exists(tempPath))
-                {
-                    resumeData = _downloader.ReadResumeMetadata(tempPath);
-                    if (resumeData != null && resumeData.MagnetUri == magnet)
-                    {
-                        // We'll ask for confirmation outside the Status block to avoid UI conflicts
-                    }
-                    else
-                    {
-                        resumeData = null;
-                    }
-                }
-                
-                queuedDownloads.Add((unrestricted, resumeData, destPath));
-            }
+            queuedDownloads = _downloader.PrepareDownloadQueue(
+                unrestrictedLinks, 
+                resolved, 
+                magnet, 
+                seasonOverride, 
+                existingEpisodeKeys, 
+                selectedSeasons, 
+                linkedCts.Token);
         });
 
         // Now ask for confirmations for any detected resumes
@@ -830,22 +746,10 @@ public class TuiApp
 
             if (cancellationToken.IsCancellationRequested) break;
 
-            // Validation logic (mirrors the previous TextPrompt validators)
-            if (string.IsNullOrWhiteSpace(magnet))
+            var validation = MagnetParser.Validate(magnet);
+            if (!validation.IsValid)
             {
-                AnsiConsole.MarkupLine("[red]Magnet link cannot be empty.[/]");
-                continue;
-            }
-
-            if (!magnet.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase))
-            {
-                AnsiConsole.MarkupLine("[red]Invalid magnet link format.[/]");
-                continue;
-            }
-
-            if (MagnetParser.ExtractHash(magnet) == null)
-            {
-                AnsiConsole.MarkupLine("[red]Invalid magnet link: Missing BTIH hash (xt=urn:btih:).[/]");
+                AnsiConsole.MarkupLine($"[red]{Markup.Escape(validation.ErrorMessage!)}[/]");
                 continue;
             }
 

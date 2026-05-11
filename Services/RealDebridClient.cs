@@ -54,6 +54,29 @@ public class RealDebridClient
         return null;
     }
 
+    public async Task<(string TorrentId, TorrentItem? MatchedItem, bool IsCached, bool NewlyAdded)> AddMagnetAndCheckCacheAsync(string magnet, string hash, CancellationToken cancellationToken = default)
+    {
+        var matched = await FindTorrentByHashAsync(hash, cancellationToken);
+        
+        if (matched == null)
+        {
+            var addRes = await AddMagnetAsync(magnet, cancellationToken);
+            var torrentId = addRes.Id;
+            
+            var cacheInfo = await GetTorrentInfoAsync(torrentId, cancellationToken);
+            var isCached = cacheInfo.Status == "downloaded";
+            
+            matched = new TorrentItem { Id = torrentId, Status = cacheInfo.Status, Hash = hash };
+            return (torrentId, matched, isCached, true);
+        }
+        else
+        {
+            var torrentId = matched.Id;
+            var isCached = matched.Status == "downloaded" || matched.Status == "waiting_files_selection";
+            return (torrentId, matched, isCached, false);
+        }
+    }
+
     public async Task<TorrentInfo> GetTorrentInfoAsync(string torrentId, CancellationToken cancellationToken = default)
     {
         var res = await _client.GetAsync($"{BaseUrl}/torrents/info/{torrentId}", cancellationToken);
