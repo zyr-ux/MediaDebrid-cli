@@ -69,7 +69,7 @@ internal static class Program
             }
             else
             {
-                await app.RunAsync(magnet, null, null, showLogo: true, cts.Token, forceResume: false, generateUnresLinks: true);
+                await app.RunAsync(magnet, null, null, showLogo: true, forceResume: false, generateUnresLinks: true, cancellationToken: cts.Token);
             }
         });
 
@@ -84,7 +84,7 @@ internal static class Program
 
         setCommand.SetAction(parseResult =>
         {
-            app.SetConfigurationValue(parseResult.GetValue(keyArg)!, parseResult.GetValue(valueArg)!);
+            TuiApp.SetConfigurationValue(parseResult.GetValue(keyArg)!, parseResult.GetValue(valueArg)!);
         });
 
         rootCommand.Subcommands.Add(setCommand);
@@ -93,7 +93,7 @@ internal static class Program
         var listCommand = new Command("list", "List all current configurations");
         listCommand.SetAction(_ =>
         {
-            app.ListConfiguration();
+            TuiApp.ListConfiguration();
         });
 
         rootCommand.Subcommands.Add(listCommand);

@@ -45,7 +45,7 @@ public class TuiApp
         AnsiConsole.Write(new FigletText("MediaDebrid").Color(Color.Green));
     }
 
-    public async Task RunAsync(string magnet, string? seasonOverride = null, string? episodeOverride = null, bool showLogo = true, CancellationToken cancellationToken = default, bool forceResume = false, bool generateUnresLinks = false)
+    public async Task RunAsync(string magnet, string? seasonOverride = null, string? episodeOverride = null, bool showLogo = true, bool forceResume = false, bool generateUnresLinks = false, CancellationToken cancellationToken = default)
     {
         if (showLogo)
         {
@@ -196,7 +196,7 @@ public class TuiApp
             throw new TerminationException("[bold red]X[/] Torrent is dead.");
         }
 
-        List<int> seasonsInTorrent = new();
+        List<int> seasonsInTorrent = [];
         if (resolved.Type == "show")
         {
             seasonsInTorrent = info.Files
@@ -204,7 +204,7 @@ public class TuiApp
                 {
                     var meta = _metadataResolver.ParseName(f.Path);
                     var seasons = Utils.ParseRange(meta.Season);
-                    return seasons.Any() ? (int?)seasons.First() : null;
+                    return seasons.Count > 0 ? (int?)seasons.First() : null;
                 })
                 .Where(s => s.HasValue)
                 .Select(s => s!.Value)
@@ -230,7 +230,7 @@ public class TuiApp
             try
             {
                 string? input = null;
-                var seasonRangeSuggestion = seasonsInTorrent.Any() ? $"{seasonsInTorrent.Min()}-{seasonsInTorrent.Max()}" : "1-3";
+                var seasonRangeSuggestion = seasonsInTorrent.Count > 0 ? $"{seasonsInTorrent.Min()}-{seasonsInTorrent.Max()}" : "1-3";
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     input = await ReadLineWithEffectAsync($"[yellow]Multiple seasons detected ({string.Join(", ", seasonsInTorrent.Select(s => $"S{s:D2}"))}).[/]\nEnter [green]season number or range[/] (e.g. {seasonRangeSuggestion}) to download (leave empty for all)", cancellationToken);
@@ -239,7 +239,7 @@ public class TuiApp
                     if (string.IsNullOrWhiteSpace(input)) break;
 
                     var parsed = Utils.ParseRange(input);
-                    if (!parsed.Any())
+                    if (parsed.Count == 0)
                     {
                         AnsiConsole.MarkupLine($"[red]Please enter a valid season number or range (e.g., {seasonRangeSuggestion}).[/]");
                         continue;
@@ -302,7 +302,7 @@ public class TuiApp
                 try
                 {
                     string? input = null;
-                    var epRangeSuggestion = episodesInTorrent.Any() ? $"{episodesInTorrent.Min()}-{episodesInTorrent.Max()}" : "1-12";
+                    var epRangeSuggestion = episodesInTorrent.Count > 0 ? $"{episodesInTorrent.Min()}-{episodesInTorrent.Max()}" : "1-12";
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         input = await ReadLineWithEffectAsync($"Enter [green]episode number or range[/] (e.g. {epRangeSuggestion}) to download (leave empty for all)", cancellationToken);
@@ -311,7 +311,7 @@ public class TuiApp
                         if (string.IsNullOrWhiteSpace(input)) break;
 
                         var parsed = Utils.ParseRange(input);
-                        if (!parsed.Any())
+                        if (parsed.Count == 0)
                         {
                             AnsiConsole.MarkupLine($"[red]Please enter a valid episode number or range (e.g., {epRangeSuggestion}).[/]");
                             continue;
@@ -323,11 +323,11 @@ public class TuiApp
                             var fileSeasons = Utils.ParseRange(meta.Season);
                             var fileEpisodes = Utils.ParseRange(meta.Episode);
                             
-                            if (sRange.Any() && !fileSeasons.Any(s => sRange.Contains(s))) return false;
+                            if (sRange.Count > 0 && !fileSeasons.Any(s => sRange.Contains(s))) return false;
                             return fileEpisodes.Any(e => parsed.Contains(e));
                         }))
                         {
-                            var scope = sRange.Any() ? "in selected seasons" : "in this torrent";
+                            var scope = sRange.Count > 0 ? "in selected seasons" : "in this torrent";
                             AnsiConsole.MarkupLine($"[red]No episodes from range {input} found {scope}.[/]");
                             continue;
                         }
@@ -363,12 +363,12 @@ public class TuiApp
                 .Select(s => s!.Value)
                 .ToHashSet();
 
-            if (!selectedSeasons.Any() && !string.IsNullOrEmpty(resolved.Season))
+            if (selectedSeasons.Count == 0 && !string.IsNullOrEmpty(resolved.Season))
             {
                 selectedSeasons = Utils.ParseRange(resolved.Season);
             }
 
-            if (!selectedSeasons.Any()) selectedSeasons.Add(1);
+            if (selectedSeasons.Count == 0) selectedSeasons.Add(1);
         }
 
         await AnsiConsole.Status()
@@ -385,7 +385,7 @@ public class TuiApp
                         {
                             var seasonsToCheck = selectedSeasons;
 
-                            existingEpisodeKeys = new HashSet<string>();
+                            existingEpisodeKeys = [];
                             foreach (var s in seasonsToCheck)
                             {
                                 var seasonDir = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year, s);
@@ -396,7 +396,7 @@ public class TuiApp
                                 }
                             }
 
-                            if (existingEpisodeKeys.Any())
+                            if (existingEpisodeKeys.Count > 0)
                             {
                                 var epRange = Utils.ParseRange(episodeOverride);
                                 var sRange = Utils.ParseRange(seasonOverride);
@@ -404,10 +404,10 @@ public class TuiApp
                                 // Find all episodes in the torrent that match our selection criteria
                                 var episodesInTorrent = info.Files
                                     .Where(f => {
-                                        if (f.Bytes < 50_000_000 && !epRange.Any()) return false;
+                                        if (f.Bytes < 50_000_000 && epRange.Count == 0) return false;
                                         var meta = _metadataResolver.ParseName(f.Path);
                                         var fileSeasons = Utils.ParseRange(meta.Season);
-                                        return !sRange.Any() || fileSeasons.Any(s => sRange.Contains(s));
+                                        return sRange.Count == 0 || fileSeasons.Any(s => sRange.Contains(s));
                                     })
                                     .SelectMany(f => {
                                         var meta = _metadataResolver.ParseName(f.Path);
@@ -420,7 +420,7 @@ public class TuiApp
                                     })
                                     .ToHashSet();
 
-                                if (episodesInTorrent.Any() && episodesInTorrent.All(key => existingEpisodeKeys.Contains(key)))
+                                if (episodesInTorrent.Count > 0 && episodesInTorrent.All(key => existingEpisodeKeys.Contains(key)))
                                 {
                                     var scope = (selectedSeasons.Count > 1 && string.IsNullOrEmpty(episodeOverride))
                                         ? "All seasons and episodes of this show"
@@ -462,7 +462,7 @@ public class TuiApp
                         ctx.Status("[yellow]Selecting files...[/]");
                         var fileIds = Utils.GetSelectedFiles(info.Files, seasonOverride, episodeOverride, existingEpisodeKeys);
 
-                        if (!fileIds.Any())
+                        if (fileIds.Length == 0)
                         {
                             throw new TerminationException("[bold red]X[/] No files found to download.");
                         }
@@ -587,6 +587,7 @@ public class TuiApp
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         var queuedDownloads = new List<(UnrestrictResponse Unrestricted, ResumeMetadata? ResumeData, string DestPath)>();
+        bool silentExit = false;
 
         await AnsiConsole.Status().StartAsync("[yellow]Preparing downloads...[/]", async ctx =>
         {
@@ -607,10 +608,10 @@ public class TuiApp
                 {
                     var meta = _metadataResolver.ParseName(filename);
                     var episodes = Utils.ParseRange(meta.Episode);
-                    if (episodes.Any() && existingEpisodeKeys != null)
+                    if (episodes.Count > 0 && existingEpisodeKeys != null)
                     {
                         var seasons = Utils.ParseRange(meta.Season);
-                        var sNum = seasons.Any() ? (int?)seasons.First() : null;
+                        var sNum = seasons.Count > 0 ? (int?)seasons.First() : null;
                         
                         if (!sNum.HasValue && selectedSeasons.Count == 1)
                         {
@@ -646,18 +647,18 @@ public class TuiApp
         needsNewline = true;
         for (int i = 0; i < queuedDownloads.Count; i++)
         {
-            var item = queuedDownloads[i];
-            if (item.ResumeData != null)
+            var (unrestricted, resumeData, destPath) = queuedDownloads[i];
+            if (resumeData != null)
             {
                 if (!forceResume && needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
-                if (forceResume || await ConfirmAsync($"[yellow]Partial download found for {Markup.Escape(item.Unrestricted.Filename)} ({Utils.FormatBytes(item.ResumeData.Segments.Sum(s => s.Current - s.Start))} / {Utils.FormatBytes(item.ResumeData.TotalSize)}). Resume?[/]", cancellationToken))
+                if (forceResume || await ConfirmAsync($"[yellow]Partial download found for {Markup.Escape(unrestricted.Filename)} ({Utils.FormatBytes(resumeData.Segments.Sum(s => s.Current - s.Start))} / {Utils.FormatBytes(resumeData.TotalSize)}). Resume?[/]", cancellationToken))
                 {
                     // Keep it
                 }
                 else
                 {
-                    File.Delete(item.DestPath + ".mdebrid");
-                    queuedDownloads[i] = (item.Unrestricted, null, item.DestPath);
+                    File.Delete(destPath + ".mdebrid");
+                    queuedDownloads[i] = (unrestricted, null, destPath);
                 }
             }
         }
@@ -693,17 +694,17 @@ public class TuiApp
                     {
                         foreach (var item in queuedDownloads)
                         {
+                            var (unrestricted, resumeData, destPath) = item;
+                            var currentResumeData = resumeData;
+
                             if (linkedCts.Token.IsCancellationRequested) break;
 
                             ProgressTask? progressTask = null;
                             try
                             {
-                                var unrestricted = item.Unrestricted;
                                 var filename = unrestricted.Filename;
-                                var destPath = item.DestPath;
                                 var tempPath = destPath + ".mdebrid";
-                                var resumeData = item.ResumeData;
-
+                                
                                 // Final safety check: Skip if file already exists
                                 if (File.Exists(destPath))
                                 {
@@ -714,10 +715,10 @@ public class TuiApp
                                 {
                                     var meta = _metadataResolver.ParseName(filename);
                                     var episodes = Utils.ParseRange(meta.Episode);
-                                    if (episodes.Any() && existingEpisodeKeys != null)
+                                    if (episodes.Count > 0 && existingEpisodeKeys != null)
                                     {
                                         var seasons = Utils.ParseRange(meta.Season);
-                                        var sNum = seasons.Any() ? (int?)seasons.First() : null;
+                                        var sNum = seasons.Count > 0 ? (int?)seasons.First() : null;
 
                                         if (!sNum.HasValue && selectedSeasons.Count == 1)
                                         {
@@ -744,10 +745,10 @@ public class TuiApp
                                 {
                                     var meta = _metadataResolver.ParseName(filename);
                                     var episodes = Utils.ParseRange(meta.Episode);
-                                    if (episodes.Any())
+                                    if (episodes.Count > 0)
                                     {
                                         var seasons = Utils.ParseRange(meta.Season);
-                                        var sNum = seasons.Any() ? seasons.First() : 1;
+                                        var sNum = seasons.Count > 0 ? seasons.First() : 1;
                                         _taskEpisodeTexts[progressTask.Id] = $"S{sNum:D2}E{episodes.First():D2}";
                                     }
                                 }
@@ -756,9 +757,9 @@ public class TuiApp
 
                                 var rootPath = Settings.GetRootPathForType(resolved.Type);
                                 
-                                if (resumeData == null)
+                                if (currentResumeData == null)
                                 {
-                                    resumeData = new ResumeMetadata
+                                    currentResumeData = new ResumeMetadata
                                     {
                                         MagnetUri = magnet,
                                         FileId = unrestricted.Id,
@@ -770,14 +771,14 @@ public class TuiApp
                                 else
                                 {
                                     // Initialize task with existing progress
-                                    if (resumeData.TotalSize > 0)
+                                    if (currentResumeData.TotalSize > 0)
                                     {
-                                        progressTask.MaxValue = resumeData.TotalSize;
-                                        progressTask.Value = resumeData.Segments.Sum(s => s.Current - s.Start);
+                                        progressTask.MaxValue = currentResumeData.TotalSize;
+                                        progressTask.Value = currentResumeData.Segments.Sum(s => s.Current - s.Start);
                                     }
                                 }
 
-                                await _downloader.DownloadFileAsync(unrestricted.Download, destPath, rootPath, progressKey, linkedCts.Token, resumeData);
+                                await _downloader.DownloadFileAsync(unrestricted.Download, destPath, rootPath, progressKey, linkedCts.Token, currentResumeData);
 
                                 progressTask.Value = progressTask.MaxValue;
                                 progressTask.StopTask();
@@ -905,7 +906,7 @@ public class TuiApp
                 AnsiConsole.MarkupLine("[yellow]Stopping... Partial progress preserved for resume.[/]");
                 var cleanupRoot = resolved != null ? Settings.GetRootPathForType(resolved.Type) : null;
                 Downloader.CleanupFiles(activePaths, cleanupRoot, force: false);
-                throw new TerminationException("");
+                silentExit = true;
             }
             else
             {
@@ -913,6 +914,8 @@ public class TuiApp
                 Downloader.CleanupFiles(activePaths, cleanupRoot, force: false);
             }
         }
+
+        if (silentExit) throw new TerminationException("");
     }
 
     public async Task RunInteractiveAsync(CancellationToken cancellationToken, bool generateUnresLinks = false)
@@ -977,7 +980,7 @@ public class TuiApp
             return;
         }
 
-        await RunAsync(metadata.MagnetUri, metadata.SeasonOverride, metadata.EpisodeOverride, showLogo: true, cancellationToken, forceResume: true);
+        await RunAsync(metadata.MagnetUri, metadata.SeasonOverride, metadata.EpisodeOverride, showLogo: true, forceResume: true, cancellationToken: cancellationToken);
     }
 
     public async Task EnsureConfiguredAsync(CancellationToken cancellationToken)
@@ -1031,7 +1034,7 @@ public class TuiApp
         AnsiConsole.WriteLine();
     }
 
-    public void SetConfigurationValue(string key, string value)
+    public static void SetConfigurationValue(string key, string value)
     {
         var (success, message, _) = Utils.UpdateConfiguration(key, value);
         if (success)
@@ -1053,7 +1056,7 @@ public class TuiApp
         }
     }
 
-    public void ListConfiguration()
+    public static void ListConfiguration()
     {
         AnsiConsole.WriteLine();
         var table = new Table()
@@ -1094,7 +1097,7 @@ public class TuiApp
         AnsiConsole.WriteLine();
     }
 
-    private async Task<bool> ConfirmAsync(string prompt, CancellationToken ct, bool defaultValue = true)
+    private static async Task<bool> ConfirmAsync(string prompt, CancellationToken ct, bool defaultValue = true)
     {
         var choice = defaultValue ? "[[y/n]] (y)" : "[[y/n]] (n)";
 
@@ -1115,7 +1118,7 @@ public class TuiApp
         throw new OperationCanceledException(ct);
     }
 
-    private async Task<string?> ReadLineWithEffectAsync(string prompt, CancellationToken ct, ConsoleColor color = ConsoleColor.White, int batchSize = 5, bool secret = false, string? defaultValue = null)
+    private static async Task<string?> ReadLineWithEffectAsync(string prompt, CancellationToken ct, ConsoleColor color = ConsoleColor.White, int batchSize = 5, bool secret = false, string? defaultValue = null)
     {
         var displayPrompt = prompt.Trim();
         if (!string.IsNullOrEmpty(defaultValue))
@@ -1123,7 +1126,7 @@ public class TuiApp
             displayPrompt = $"{displayPrompt} [blue]({defaultValue})[/]";
         }
         
-        if (!displayPrompt.EndsWith(":")) displayPrompt += ":";
+        if (!displayPrompt.EndsWith(':')) displayPrompt += ":";
         AnsiConsole.Markup(displayPrompt + " ");
         
         var sb = new System.Text.StringBuilder();
