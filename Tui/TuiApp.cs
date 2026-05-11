@@ -989,7 +989,6 @@ public class TuiApp
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[yellow]Initial Setup Required[/]");
         AnsiConsole.MarkupLine("Please provide the following required configuration values:");
         AnsiConsole.WriteLine();
@@ -1015,9 +1014,20 @@ public class TuiApp
 
             if (string.IsNullOrWhiteSpace(Settings.Instance.MediaRoot))
             {
-                var defaultPath = Settings.DefaultBaseRoot;
-                var root = await ReadLineWithEffectAsync("Enter [green]Movies/Shows Root Path[/]", cancellationToken, defaultValue: defaultPath);
-                if (root != null) Settings.Instance.MediaRoot = root;
+                var root = await ReadLineWithEffectAsync("Enter [green]Movies/Shows Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
+                Settings.Instance.MediaRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
+            }
+
+            if (string.IsNullOrWhiteSpace(Settings.Instance.GamesRoot))
+            {
+                var root = await ReadLineWithEffectAsync("Enter [green]Games Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
+                Settings.Instance.GamesRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
+            }
+
+            if (string.IsNullOrWhiteSpace(Settings.Instance.OthersRoot))
+            {
+                var root = await ReadLineWithEffectAsync("Enter [green]Miscellaneous Downloads Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
+                Settings.Instance.OthersRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
             }
         }
         catch (OperationCanceledException)
@@ -1123,7 +1133,7 @@ public class TuiApp
         var displayPrompt = prompt.Trim();
         if (!string.IsNullOrEmpty(defaultValue))
         {
-            displayPrompt = $"{displayPrompt} [blue]({defaultValue})[/]";
+            displayPrompt = $"{displayPrompt} [dim](leave blank for default)[/]";
         }
         
         if (!displayPrompt.EndsWith(':')) displayPrompt += ":";
