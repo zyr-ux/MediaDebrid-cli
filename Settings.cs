@@ -86,6 +86,12 @@ public static class Settings
         // Load numeric flags from env if still at defaults (legacy support)
         if (Instance.ConnectionsPerFile == 8 && int.TryParse(Environment.GetEnvironmentVariable("CONNECTIONS_PER_FILE"), out int cpf)) 
             Instance.ConnectionsPerFile = cpf;
+
+        // Ensure config file always exists after first successful load
+        if (!File.Exists(ConfigFilePath))
+        {
+            Save();
+        }
     }
 
     public static void Save()
