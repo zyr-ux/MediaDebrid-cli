@@ -130,7 +130,6 @@ public class TuiApp
             AnsiConsole.MarkupLine($"[bold green]✓[/] Magnet added to Real-Debrid.");
         }
 
-        AnsiConsole.WriteLine();
         await AnsiConsole.Status()
             .StartAsync("Initializing...", async ctx =>
             {
@@ -223,6 +222,7 @@ public class TuiApp
 
         if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
         RenderMetadataPanel(resolved);
+        AnsiConsole.WriteLine();
 
         // Interactive season selection for multi-season shows
         if (resolved.Type == "show" && string.IsNullOrEmpty(seasonOverride) && seasonsInTorrent.Count > 1)
