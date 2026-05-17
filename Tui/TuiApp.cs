@@ -455,17 +455,28 @@ public class TuiApp
 
         try
         {
+            var progressColumns = new List<ProgressColumn>
+            {
+                new SpinnerColumn(_taskDisplayStatuses, _frozenFrames, _downloader)
+            };
+
+            if (resolved.Type == "show")
+            {
+                progressColumns.Add(new EpisodeColumn(_taskEpisodeTexts));
+            }
+
+            progressColumns.AddRange([
+                new TaskDescriptionColumn(),
+                new ProgressBarColumn { Width = 200 },
+                new PercentageColumn(),
+                new CustomDownloadedColumn(),
+                new CustomTransferSpeedColumn(_taskSpeeds),
+                new CustomEtaColumn(_taskSpeeds)
+            ]);
+
             await AnsiConsole.Progress()
                 .AutoClear(false)
-                .Columns(
-                    new SpinnerColumn(_taskDisplayStatuses, _frozenFrames, _downloader),
-                    new EpisodeColumn(_taskEpisodeTexts),
-                    new TaskDescriptionColumn(),
-                    new ProgressBarColumn { Width = 200 },
-                    new PercentageColumn(),
-                    new CustomDownloadedColumn(),
-                    new CustomTransferSpeedColumn(_taskSpeeds),
-                    new CustomEtaColumn(_taskSpeeds))
+                .Columns([.. progressColumns])
                 .StartAsync(async ctx =>
                 {
 
