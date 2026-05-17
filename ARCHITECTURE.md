@@ -26,6 +26,15 @@ Standard progress bars lack the domain-specific data needed for media downloadin
 - **Interactive Download**: Prompts for magnets, handles season/episode selection, and downloads the files.
 - **Unrestricted Link Generation (`unres`)**: Follows the same selection flow but bypasses the downloader entirely, instead outputting direct Real-Debrid download URLs to the terminal for external use.
 
+### 1.4 Stateful Spacing Engine (`PrintGap.cs`)
+To eliminate manual layout flags (e.g., `needsNewline`) and prevent ugly double-spacing (negative space) in terminal layouts, we built a modular, state-tracking spacing engine.
+
+- **Mechanism**: Maintains an in-memory `_hasGap` flag.
+- **`Print()`**: Dynamically prints a single empty line gap only if the previous line wasn't already a gap.
+- **`Suppress()`**: Sets the state to `true` to force-bypass subsequent spacing requests. This is called immediately before and after padded live components (like Spectre's `AnsiConsole.Progress` bars) to perfectly preserve tight visual ratios.
+- **State Resetting**: All wrapped printing methods (`Markup`, `MarkupLine`, `Write`) automatically reset `_hasGap = false` to indicate that content has been printed, indicating a separator gap is now permitted.
+- **Prompt Synchronization**: Seamlessly coordinates with intercepted custom inputs (like `ReadLineWithEffectAsync`) to avoid shifting active status spinners while ensuring the gap printer remains correctly primed.
+
 ---
 
 ## 2. Resumable Download Engine (`Services/Downloader.cs`)

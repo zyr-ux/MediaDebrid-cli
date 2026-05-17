@@ -13,7 +13,7 @@ public static class Components
 
     public static void ShowLogo()
     {
-        AnsiConsole.Write(new FigletText("MediaDebrid").Color(Color.Green));
+        PrintGap.Write(new FigletText("MediaDebrid").Color(Color.Green));
     }
 
     public static void RenderMetadataPanel(MediaMetadata meta)
@@ -103,12 +103,12 @@ public static class Components
             Border = BoxBorder.Rounded,
             Expand = true
         };
-        AnsiConsole.Write(panel);
+        PrintGap.Write(panel);
     }
 
     public static void ListConfiguration()
     {
-        AnsiConsole.WriteLine();
+        PrintGap.Print();
         var table = new Table()
             .Border(TableBorder.Rounded)
             .BorderColor(Color.White);
@@ -142,9 +142,9 @@ public static class Components
             );
         }
 
-        AnsiConsole.Write(table);
-        AnsiConsole.MarkupLine("[grey] Use 'mediadebrid set <key> <value>' to modify these settings[/]");
-        AnsiConsole.WriteLine();
+        PrintGap.Write(table);
+        PrintGap.MarkupLine("[grey] Use 'mediadebrid set <key> <value>' to modify these settings[/]");
+        PrintGap.Print();
     }
 
     public static string GetRootHelpDescription()
@@ -183,9 +183,9 @@ public static class Components
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        AnsiConsole.MarkupLine("[yellow]Initial Setup Required[/]");
-        AnsiConsole.MarkupLine("Please provide the following required configuration values:");
-        AnsiConsole.WriteLine();
+        PrintGap.MarkupLine("[yellow]Initial Setup Required[/]");
+        PrintGap.MarkupLine("Please provide the following required configuration values:");
+        PrintGap.Print();
 
         try
         {
@@ -198,7 +198,7 @@ public static class Components
                     
                     if (string.IsNullOrWhiteSpace(token))
                     {
-                        AnsiConsole.MarkupLine("[red]Key cannot be empty.[/]");
+                        PrintGap.MarkupLine("[red]Key cannot be empty.[/]");
                         continue;
                     }
                     Settings.Instance.RealDebridApiToken = token;
@@ -233,9 +233,9 @@ public static class Components
 
         cancellationToken.ThrowIfCancellationRequested();
         Settings.Save();
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[green]Configuration saved successfully![/]");
-        AnsiConsole.WriteLine();
+        PrintGap.Print();
+        PrintGap.MarkupLine("[green]Configuration saved successfully![/]");
+        PrintGap.Print();
     }
 
     public static async Task<bool> ConfirmAsync(string prompt, CancellationToken ct, bool defaultValue = true)
@@ -253,7 +253,7 @@ public static class Components
             if (trimmed is "y" or "yes") return true;
             if (trimmed is "n" or "no") return false;
 
-            AnsiConsole.MarkupLine("[red]Please enter 'y' or 'n'.[/]");
+            PrintGap.MarkupLine("[red]Please enter 'y' or 'n'.[/]");
         }
 
         throw new OperationCanceledException(ct);
@@ -268,7 +268,7 @@ public static class Components
         }
         
         if (!displayPrompt.EndsWith(':')) displayPrompt += ":";
-        AnsiConsole.Markup(displayPrompt + " ");
+        PrintGap.Markup(displayPrompt + " ");
         
         var sb = new System.Text.StringBuilder();
 
@@ -280,7 +280,8 @@ public static class Components
 
                 if (key.Key == ConsoleKey.Enter)
                 {
-                    AnsiConsole.WriteLine();
+                    AnsiConsole.WriteLine(); // Move cursor to the next line
+                    PrintGap.HasGap = false; // Completed input is content
                     var result = sb.ToString().Trim();
                     return string.IsNullOrEmpty(result) ? defaultValue : result;
                 }

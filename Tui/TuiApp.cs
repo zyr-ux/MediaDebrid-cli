@@ -98,16 +98,16 @@ public class TuiApp
             throw new TerminationException($"[bold red]X[/] Network error during cache check: [white]{Markup.Escape(ex.Message)}[/]");
         }
 
-        AnsiConsole.WriteLine();
+        PrintGap.Print();
         if (!newlyAdded)
         {
             // Existing torrent confirmed.
-            AnsiConsole.MarkupLine($"[bold green]✓[/] Found existing torrent.");
+            PrintGap.MarkupLine($"[bold green]✓[/] Found existing torrent.");
         }
         else
         {
             // Newly added — cache status is unknown until after file selection.
-            AnsiConsole.MarkupLine($"[bold green]✓[/] Magnet added to Real-Debrid.");
+            PrintGap.MarkupLine($"[bold green]✓[/] Magnet added to Real-Debrid.");
         }
 
         await AnsiConsole.Status()
@@ -132,13 +132,11 @@ public class TuiApp
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Error during initialization:[/] [white]{Markup.Escape(ex.Message)}[/]");
+                    PrintGap.MarkupLine($"[red]Error during initialization:[/] [white]{Markup.Escape(ex.Message)}[/]");
                 }
             });
 
         if (info == null || resolved == null) return;
-
-        bool needsNewline = true;
 
         if (info.Status == "dead")
         {
@@ -159,9 +157,9 @@ public class TuiApp
             }
         }
 
-        if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
+        PrintGap.Print();
         Components.RenderMetadataPanel(resolved);
-        AnsiConsole.WriteLine();
+        PrintGap.Print();
 
         // Interactive season selection for multi-season shows
         if (resolved.Type == "show" && string.IsNullOrEmpty(seasonOverride) && seasonsInTorrent.Count > 1)
@@ -180,13 +178,13 @@ public class TuiApp
                     var parsed = Utils.ParseRange(input);
                     if (parsed.Count == 0)
                     {
-                        AnsiConsole.MarkupLine($"[red]Please enter a valid season number or range (e.g., {seasonRangeSuggestion}).[/]");
+                        PrintGap.MarkupLine($"[red]Please enter a valid season number or range (e.g., {seasonRangeSuggestion}).[/]");
                         continue;
                     }
 
                     if (!parsed.Any(s => seasonsInTorrent.Contains(s)))
                     {
-                        AnsiConsole.MarkupLine($"[red]None of the specified seasons ({input}) were found in this torrent.[/]");
+                        PrintGap.MarkupLine($"[red]None of the specified seasons ({input}) were found in this torrent.[/]");
                         continue;
                     }
                     break;
@@ -197,8 +195,8 @@ public class TuiApp
                     seasonOverride = input;
                     resolved.Season = input;
                     resolved.Destination = PathGenerator.GetSeasonDirectory(resolved.Type, resolved.Title, resolved.Year); // Generic dir for ranges
-                    AnsiConsole.WriteLine();
-                    AnsiConsole.MarkupLine($"[bold green]✓[/] Selected seasons [cyan]{input}[/].");
+                    PrintGap.Print();
+                    PrintGap.MarkupLine($"[bold green]✓[/] Selected seasons [cyan]{input}[/].");
                 }
             }
             catch (OperationCanceledException)
@@ -215,14 +213,14 @@ public class TuiApp
 
             if (episodesInTorrent.Count == 1)
             {
-                if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
+                PrintGap.Print();
                 episodeOverride = episodesInTorrent[0].ToString();
                 resolved.Episode = episodeOverride;
-                AnsiConsole.MarkupLine($"[bold green]✓[/] Only one episode detected ([cyan]E{episodesInTorrent[0]:D2}[/]). Auto-selecting.");
+                PrintGap.MarkupLine($"[bold green]✓[/] Only one episode detected ([cyan]E{episodesInTorrent[0]:D2}[/]). Auto-selecting.");
             }
             else
             {
-                if (needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
+                PrintGap.Print();
                 try
                 {
                     string? input = null;
@@ -237,7 +235,7 @@ public class TuiApp
                         var parsed = Utils.ParseRange(input);
                         if (parsed.Count == 0)
                         {
-                            AnsiConsole.MarkupLine($"[red]Please enter a valid episode number or range (e.g., {epRangeSuggestion}).[/]");
+                            PrintGap.MarkupLine($"[red]Please enter a valid episode number or range (e.g., {epRangeSuggestion}).[/]");
                             continue;
                         }
 
@@ -252,7 +250,7 @@ public class TuiApp
                         }))
                         {
                             var scope = sRange.Count > 0 ? "in selected seasons" : "in this torrent";
-                            AnsiConsole.MarkupLine($"[red]No episodes from range {input} found {scope}.[/]");
+                            PrintGap.MarkupLine($"[red]No episodes from range {input} found {scope}.[/]");
                             continue;
                         }
                         break;
@@ -262,8 +260,8 @@ public class TuiApp
                     {
                         episodeOverride = input;
                         resolved.Episode = input;
-                        AnsiConsole.WriteLine();
-                        AnsiConsole.MarkupLine($"[bold green]✓[/] Selected episodes [cyan]{input}[/].");
+                        PrintGap.Print();
+                        PrintGap.MarkupLine($"[bold green]✓[/] Selected episodes [cyan]{input}[/].");
                     }
                 }
                 catch (OperationCanceledException)
@@ -292,8 +290,8 @@ public class TuiApp
 
                     if (!string.IsNullOrEmpty(result.WarnMessage))
                     {
-                        AnsiConsole.WriteLine();
-                        AnsiConsole.MarkupLine(result.WarnMessage);
+                        PrintGap.Print();
+                        PrintGap.MarkupLine(result.WarnMessage);
                     }
                 }
                 catch (TerminationException) { throw; }
@@ -305,7 +303,7 @@ public class TuiApp
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Error during initialization:[/] [white]{Markup.Escape(ex.Message)}[/]");
+                    PrintGap.MarkupLine($"[red]Error during initialization:[/] [white]{Markup.Escape(ex.Message)}[/]");
                 }
             });
 
@@ -317,9 +315,9 @@ public class TuiApp
         bool wasUncached = info.Status != "downloaded";
         if (wasUncached)
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("[bold yellow]![/] Magnet is [bold yellow]not cached[/] on Real-Debrid servers.");
-            AnsiConsole.WriteLine();
+            PrintGap.Print();
+            PrintGap.MarkupLine("[bold yellow]![/] Magnet is [bold yellow]not cached[/] on Real-Debrid servers.");
+            PrintGap.Print();
 
             bool userCancelled = false;
             await AnsiConsole.Status()
@@ -372,14 +370,14 @@ public class TuiApp
             }
         }
 
-        if (!wasUncached) AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[bold green]✓[/] Files are ready and [bold cyan]cached[/]!");
+        if (!wasUncached) PrintGap.Print();
+        PrintGap.MarkupLine("[bold green]✓[/] Files are ready and [bold cyan]cached[/]!");
 
         if (generateUnresLinks)
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("[bold]Generating Unrestricted Links...[/]");
-            AnsiConsole.WriteLine();
+            PrintGap.Print();
+            PrintGap.MarkupLine("[bold]Generating Unrestricted Links...[/]");
+            PrintGap.Print();
 
             await AnsiConsole.Status().StartAsync("[yellow]Unrestricting links...[/]", async ctx =>
             {
@@ -387,17 +385,17 @@ public class TuiApp
                 var unrestrictedLinks = await GetClient().UnrestrictLinksAsync(info.Links, cancellationToken);
                 foreach (var unrestricted in unrestrictedLinks)
                 {
-                    AnsiConsole.MarkupLine($"[cyan]{Markup.Escape(unrestricted.Filename)}[/]");
-                    AnsiConsole.MarkupLine($"[white]{unrestricted.Download}[/]");
-                    AnsiConsole.WriteLine();
+                    PrintGap.MarkupLine($"[cyan]{Markup.Escape(unrestricted.Filename)}[/]");
+                    PrintGap.MarkupLine($"[white]{unrestricted.Download}[/]");
+                    PrintGap.Print();
                 }
             });
             return;
         }
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[bold]Starting Downloads...[/]");
-        AnsiConsole.MarkupLine("[dim]Controls: [yellow]P[/] Pause | [green]X[/] Save & Exit | [red]Ctrl+C[/] Cancel & Delete[/]");
+        PrintGap.Print();
+        PrintGap.MarkupLine("[bold]Starting Downloads...[/]");
+        PrintGap.MarkupLine("[dim]Controls: [yellow]P[/] Pause | [green]X[/] Save & Exit | [red]Ctrl+C[/] Cancel & Delete[/]");
 
         var activePaths = new ConcurrentBag<string>();
         Task? downloadLoopTask = null;
@@ -422,13 +420,12 @@ public class TuiApp
         });
 
         // Now ask for confirmations for any detected resumes
-        needsNewline = true;
         for (int i = 0; i < queuedDownloads.Count; i++)
         {
             var (unrestricted, resumeData, destPath) = queuedDownloads[i];
             if (resumeData != null)
             {
-                if (!forceResume && needsNewline) { AnsiConsole.WriteLine(); needsNewline = false; }
+                if (!forceResume) PrintGap.Print();
                 if (forceResume || await Components.ConfirmAsync($"[yellow]Partial download found for {Markup.Escape(unrestricted.Filename)} ({Utils.FormatBytes(resumeData.Segments.Sum(s => s.Current - s.Start))} / {Utils.FormatBytes(resumeData.TotalSize)}). Resume?[/]", cancellationToken))
                 {
                     // Keep it
@@ -474,6 +471,7 @@ public class TuiApp
                 new CustomEtaColumn(_taskSpeeds)
             ]);
 
+            PrintGap.Suppress(); // Suppress gap before padded progress bar
             await AnsiConsole.Progress()
                 .AutoClear(false)
                 .Columns([.. progressColumns])
@@ -556,9 +554,11 @@ public class TuiApp
 
                 });
 
+            PrintGap.Suppress(); // Suppress gap after padded progress bar
+
             if (!linkedCts.IsCancellationRequested)
             {
-                AnsiConsole.MarkupLine("[bold green]All downloads completed![/]");
+                PrintGap.MarkupLine("[bold green]All downloads completed![/]");
                 shouldDeletePartial = false;
             }
         }
@@ -570,7 +570,7 @@ public class TuiApp
         catch (RealDebridApiException) { throw; }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]Unexpected error ({Markup.Escape(ex.GetType().Name)}):[/] [white]{Markup.Escape(ex.Message)}[/]");
+            PrintGap.MarkupLine($"[red]Unexpected error ({Markup.Escape(ex.GetType().Name)}):[/] [white]{Markup.Escape(ex.Message)}[/]");
         }
         finally
         {
@@ -585,13 +585,13 @@ public class TuiApp
 
             if (shouldDeletePartial)
             {
-                AnsiConsole.MarkupLine("[red]Download cancelled. Cleaning up partial files...[/]");
+                PrintGap.MarkupLine("[red]Download cancelled. Cleaning up partial files...[/]");
                 var cleanupRoot = resolved != null ? Settings.GetRootPathForType(resolved.Type) : null;
                 Downloader.CleanupFiles(activePaths, cleanupRoot, force: true);
             }
             else if (linkedCts.IsCancellationRequested)
             {
-                AnsiConsole.MarkupLine("[yellow]Stopping... Partial progress preserved for resume.[/]");
+                PrintGap.MarkupLine("[yellow]Stopping... Partial progress preserved for resume.[/]");
                 var cleanupRoot = resolved != null ? Settings.GetRootPathForType(resolved.Type) : null;
                 Downloader.CleanupFiles(activePaths, cleanupRoot, force: false);
                 silentExit = true;
@@ -629,7 +629,7 @@ public class TuiApp
             var validation = MagnetParser.Validate(magnet);
             if (!validation.IsValid)
             {
-                AnsiConsole.MarkupLine($"[red]{Markup.Escape(validation.ErrorMessage!)}[/]");
+                PrintGap.MarkupLine($"[red]{Markup.Escape(validation.ErrorMessage!)}[/]");
                 continue;
             }
 
@@ -645,14 +645,14 @@ public class TuiApp
     {
         if (!File.Exists(path))
         {
-            AnsiConsole.MarkupLine($"[red]Error:[/] File [cyan]{path}[/] not found.");
+            PrintGap.MarkupLine($"[red]Error:[/] File [cyan]{path}[/] not found.");
             return;
         }
 
         var metadata = _downloader.ReadResumeMetadata(path);
         if (metadata == null)
         {
-            AnsiConsole.MarkupLine($"[red]Error:[/] Could not read resume metadata from [cyan]{path}[/].");
+            PrintGap.MarkupLine($"[red]Error:[/] Could not read resume metadata from [cyan]{path}[/].");
             return;
         }
 

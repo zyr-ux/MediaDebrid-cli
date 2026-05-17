@@ -23,6 +23,7 @@ The codebase follows a modular structure separating UI, services, and models.
 
 ### `Tui/` (Terminal UI)
 - **`TuiApp.cs`**: The core of the user interface. It manages the Spectre.Console components (e.g., `Progress`, layouts, panels, tables). It is responsible for orchestrating the overall flow, displaying download progress, handling user input for cancellation/pausing, and logging formatted status messages.
+- **`PrintGap.cs`**: **CRITICAL** - Central stateful spacing manager that coordinates all console output margins. It tracks if the console has already printed a newline, preventing double gaps and managing progress bar padding.
 
 ### `Services/` (Core Business Logic)
 This directory contains the heavy lifting of the application.
@@ -46,7 +47,11 @@ Contains POCO classes, DTOs, and application state objects.
 When modifying or generating code for `MediaDebrid-cli`, adhere strictly to the following guidelines:
 
 ### 1. Terminal UI (TUI) Rules
-- **Do not use standard `Console.WriteLine`** for primary output. Always route user-facing output through `Spectre.Console` (via `AnsiConsole.MarkupLine` or the internal logging mechanisms within `TuiApp`).
+- **Do not use standard `Console.WriteLine` or standard `AnsiConsole.WriteLine/MarkupLine`** directly for spacing or standard prints in the primary TUI flow. Instead, always route outputs through **`PrintGap`** (e.g., `PrintGap.Print()`, `PrintGap.MarkupLine()`, `PrintGap.Write()`) to preserve state-based margin tracking.
+- **Rules of Spacing (`PrintGap`):**
+  - Use `PrintGap.Print()` to insert visual separators; it self-corrects and prints exactly one empty line.
+  - Use `PrintGap.Suppress()` before and after padded live blocks (like progress bars) to eliminate negative spacing margins.
+  - Standard prints automatically reset the gap state so the next `Print()` is allowed.
 - When updating progress or showing status, ensure thread-safety if interacting with Spectre.Console's `ProgressContext` from background tasks.
 - Keep the TUI responsive. Heavy blocking operations should be offloaded to asynchronous tasks.
 
