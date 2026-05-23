@@ -317,7 +317,7 @@ public class TuiApp
         {
             PrintGap.Print();
             PrintGap.MarkupLine("[bold yellow]![/] Magnet is [bold yellow]not cached[/] on Real-Debrid servers.");
-            PrintGap.Print();
+            PrintGap.Suppress();
 
             bool userCancelled = false;
             await AnsiConsole.Status()
@@ -709,8 +709,11 @@ public class TuiApp
 
             if (isPaused && !task.IsFinished)
             {
-                // Truncate filename to 33 chars to fit "PAUSED " (7 chars) within the 40 char limit
-                var truncated = originalName.Length > 33 ? originalName[..30] + "..." : originalName;
+                // Truncate filename so "PAUSED " (7 visible chars) + truncated == original width
+                var maxNameLen = originalName.Length - 7;
+                var truncated = maxNameLen >= 4
+                    ? originalName[..(maxNameLen - 3)] + "..."
+                    : maxNameLen > 0 ? originalName[..maxNameLen] : "";
                 task.Description = $"[yellow]PAUSED[/] [cyan]{Markup.Escape(truncated)}[/]";
             }
             else
@@ -749,7 +752,10 @@ public class TuiApp
                         _frozenFrames[t.Id] = frameIdx;
                         if (_taskOriginalNames.TryGetValue(t.Id, out var origName))
                         {
-                            var truncated = origName.Length > 33 ? origName[..30] + "..." : origName;
+                            var maxNameLen = origName.Length - 7;
+                            var truncated = maxNameLen >= 4
+                                ? origName[..(maxNameLen - 3)] + "..."
+                                : maxNameLen > 0 ? origName[..maxNameLen] : "";
                             t.Description = $"[blue]SAVED [/] [cyan]{Markup.Escape(truncated)}[/]";
                         }
                     }

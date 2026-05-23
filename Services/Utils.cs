@@ -93,9 +93,13 @@ public static class Utils
     {
         string[] units = { "B", "KB", "MB", "GB", "TB" };
         if (bytes == 0) return "0 B";
-        int unitIndex = (int)Math.Floor(Math.Log(bytes, 1024));
-        if (unitIndex >= units.Length) unitIndex = units.Length - 1;
-        double size = bytes / Math.Pow(1024, unitIndex);
+        double size = bytes;
+        int unitIndex = 0;
+        while (size >= 1000 && unitIndex < units.Length - 1)
+        {
+            size /= 1024;
+            unitIndex++;
+        }
         return $"{size:F2} {units[unitIndex]}";
     }
 
