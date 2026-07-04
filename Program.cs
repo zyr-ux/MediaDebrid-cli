@@ -162,6 +162,11 @@ internal static class Program
             ex.Print();
             return 1;
         }
+        catch (TorBoxApiException ex)
+        {
+            ex.Print();
+            return 1;
+        }
         catch (MagnetException ex)
         {
             ex.Print();

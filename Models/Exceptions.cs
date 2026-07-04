@@ -100,3 +100,22 @@ public class RealDebridClientException : Exception
         AnsiConsole.MarkupLine($"[bold red]X[/] Client Error: [white]{Markup.Escape(Message)}[/]");
     }
 }
+
+public class TorBoxApiException : HttpRequestException
+{
+    public string Error { get; }
+    public string Detail { get; }
+
+    public TorBoxApiException(string error, string detail, System.Net.HttpStatusCode statusCode) 
+        : base($"TorBox API Error: {detail} (Code: {error})", null, statusCode)
+    {
+        Error = error;
+        Detail = detail;
+    }
+
+    public void Print()
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[bold red]X[/] TorBox API Error: [white]{Markup.Escape(Detail)}[/] (Code: {Error})");
+    }
+}

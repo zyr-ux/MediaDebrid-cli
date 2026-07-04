@@ -4,7 +4,7 @@ using MediaDebrid_cli.Models;
 
 namespace MediaDebrid_cli.Services;
 
-public class RealDebridClient
+public class RealDebridClient : IDebridClient
 {
     private const string BaseUrl = "https://api.real-debrid.com/rest/1.0";
     private readonly HttpClient _client;

@@ -38,7 +38,7 @@ public class TorrentInfo : TorrentItem
 public class TorrentFile
 {
     [JsonPropertyName("id")]
-    public int Id { get; set; }
+    public long Id { get; set; }
 
     [JsonPropertyName("path")]
     public string Path { get; set; } = string.Empty;

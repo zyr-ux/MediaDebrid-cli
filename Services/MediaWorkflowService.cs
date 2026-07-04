@@ -2,9 +2,9 @@ using MediaDebrid_cli.Models;
 
 namespace MediaDebrid_cli.Services;
 
-public class MediaWorkflowService(RealDebridClient client, MetadataResolver resolver)
+public class MediaWorkflowService(IDebridClient client, MetadataResolver resolver)
 {
-    private readonly RealDebridClient _client = client;
+    private readonly IDebridClient _client = client;
     private readonly MetadataResolver _resolver = resolver;
 
     public async Task<(MediaMetadata Resolved, TorrentInfo Info, string TorrentId)> InitializeMediaAsync(

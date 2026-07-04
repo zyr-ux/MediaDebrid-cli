@@ -7,7 +7,7 @@ namespace MediaDebrid_cli.Tui;
 
 public class TuiApp
 {
-    private RealDebridClient? _client;
+    private IDebridClient? _client;
     private readonly Downloader _downloader;
     private readonly MetadataResolver _metadataResolver;
     private MediaWorkflowService? _workflowService;
@@ -36,7 +36,15 @@ public class TuiApp
         _taskOriginalNames = new ConcurrentDictionary<int, string>();
     }
 
-    private RealDebridClient GetClient() => _client ??= new RealDebridClient();
+    private IDebridClient GetClient()
+    {
+        if (_client != null) return _client;
+        if (Settings.Instance.DebridService == "torbox")
+            _client = new TorBoxClient();
+        else
+            _client = new RealDebridClient();
+        return _client;
+    }
     private MediaWorkflowService GetWorkflowService() => _workflowService ??= new MediaWorkflowService(GetClient(), _metadataResolver);
 
     public async Task RunAsync(string magnet, string? seasonOverride = null, string? episodeOverride = null, bool showLogo = true, bool forceResume = false, bool generateUnresLinks = false, CancellationToken cancellationToken = default)
@@ -80,7 +88,7 @@ public class TuiApp
         try
         {
             await AnsiConsole.Status()
-                .StartAsync("Checking Real-Debrid cache...", async ctx =>
+                .StartAsync($"Checking {(Settings.Instance.DebridService == "torbox" ? "TorBox" : "Real-Debrid")} cache...", async ctx =>
                 {
                     ctx.Spinner(Spinner.Known.Arc);
                     ctx.SpinnerStyle(Style.Parse("yellow"));
@@ -93,6 +101,7 @@ public class TuiApp
                 });
         }
         catch (RealDebridApiException) { throw; }
+        catch (TorBoxApiException) { throw; }
         catch (HttpRequestException ex)
         {
             throw new TerminationException($"[bold red]X[/] Network error during cache check: [white]{Markup.Escape(ex.Message)}[/]");
@@ -107,7 +116,7 @@ public class TuiApp
         else
         {
             // Newly added — cache status is unknown until after file selection.
-            PrintGap.MarkupLine($"[bold green]✓[/] Magnet added to Real-Debrid.");
+            PrintGap.MarkupLine($"[bold green]✓[/] Magnet added to {(Settings.Instance.DebridService == "torbox" ? "TorBox" : "Real-Debrid")}.");
         }
 
         await AnsiConsole.Status()
@@ -126,6 +135,7 @@ public class TuiApp
                 catch (TerminationException) { throw; }
                 catch (OperationCanceledException) { throw; }
                 catch (RealDebridApiException) { throw; }
+                catch (TorBoxApiException) { throw; }
                 catch (HttpRequestException ex)
                 {
                     throw new TerminationException($"[red]X[/] Network error during initialization: [white]{Markup.Escape(ex.Message)}[/]");
@@ -297,6 +307,7 @@ public class TuiApp
                 catch (TerminationException) { throw; }
                 catch (OperationCanceledException) { throw; }
                 catch (RealDebridApiException) { throw; }
+                catch (TorBoxApiException) { throw; }
                 catch (HttpRequestException ex)
                 {
                     throw new TerminationException($"[red]X[/] Network error during initialization: [white]{Markup.Escape(ex.Message)}[/]");
@@ -316,12 +327,12 @@ public class TuiApp
         if (wasUncached)
         {
             PrintGap.Print();
-            PrintGap.MarkupLine("[bold yellow]![/] Magnet is [bold yellow]not cached[/] on Real-Debrid servers.");
+            PrintGap.MarkupLine($"[bold yellow]![/] Magnet is [bold yellow]not cached[/] on {(Settings.Instance.DebridService == "torbox" ? "TorBox" : "Real-Debrid")} servers.");
             PrintGap.Suppress();
 
             bool userCancelled = false;
             await AnsiConsole.Status()
-                .StartAsync("File is being cached by Real-Debrid [dim][[press N to stop]][/]...", async ctx =>
+                .StartAsync($"File is being cached by {(Settings.Instance.DebridService == "torbox" ? "TorBox" : "Real-Debrid")} [dim][[press N to stop]][/]...", async ctx =>
                 {
                     ctx.Spinner(Spinner.Known.Arc);
                     ctx.SpinnerStyle(Style.Parse("yellow"));
@@ -361,7 +372,7 @@ public class TuiApp
                 {
                     await GetClient().DeleteTorrentAsync(torrentId, cancellationToken);
                 });
-                throw new TerminationException("[red]Caching stopped by user. Magnet removed from Real-Debrid account.[/]");
+                throw new TerminationException($"[red]Caching stopped by user. Magnet removed from {(Settings.Instance.DebridService == "torbox" ? "TorBox" : "Real-Debrid")} account.[/]");
             }
 
             if (info.Status == "dead")
@@ -568,6 +579,7 @@ public class TuiApp
         catch (DownloadException) { throw; }
         catch (RealDebridClientException) { throw; }
         catch (RealDebridApiException) { throw; }
+        catch (TorBoxApiException) { throw; }
         catch (Exception ex)
         {
             PrintGap.MarkupLine($"[red]Unexpected error ({Markup.Escape(ex.GetType().Name)}):[/] [white]{Markup.Escape(ex.Message)}[/]");

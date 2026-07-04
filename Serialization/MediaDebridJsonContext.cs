@@ -18,6 +18,13 @@ internal partial class AppSettingsJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(TorrentInfo))]
 [JsonSerializable(typeof(UnrestrictResponse))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
+[JsonSerializable(typeof(object))]
+[JsonSerializable(typeof(TorBoxResponse<object>))]
+[JsonSerializable(typeof(TorBoxResponse<TorBoxCreateTorrentResponse>))]
+[JsonSerializable(typeof(TorBoxResponse<List<TorBoxTorrentItem>>))]
+[JsonSerializable(typeof(TorBoxResponse<TorBoxTorrentItem>))]
+[JsonSerializable(typeof(TorBoxResponse<List<TorBoxCheckCachedItem>>))]
+[JsonSerializable(typeof(TorBoxResponse<string>))]
 internal partial class MediaDebridJsonContext : JsonSerializerContext
 {
 }
