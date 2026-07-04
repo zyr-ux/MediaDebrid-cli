@@ -129,3 +129,28 @@ To prevent API tokens from being accidentally checked into source control or exp
   - **Windows (`SecureStorageWindows`)**: Integrates with the Win32 Credential Manager (`advapi32.dll` via P/Invoke) to store generic credentials prefixed with `MediaDebrid:`.
   - **macOS (`SecureStorageMacOS`)**: Integrates with the macOS Keychain (`Security.framework`) using native CFString, CFData, and SecItem API P/Invokes.
   - **Linux (`SecureStorageLinux`)**: Uses DBus (`Tmds.DBus` library) to communicate with the FreeDesktop Secret Service (`org.freedesktop.secrets`). If no session bus is available, it falls back to a locally encrypted JSON file (`linux_secrets.json`) secured with AES-GCM (128-bit key derived using PBKDF2/SHA-512 from the machine ID and current user).
+
+---
+
+## 8. Continuous Integration & Deployment (CI/CD)
+
+The project uses GitHub Actions ([release.yml](file:///.github/workflows/release.yml)) to automate building, packaging, and publishing releases on tag creation.
+
+### 8.1 Build and Release Flow
+- **Compilation**: The compilation job builds native AOT binaries for Windows, Linux, and macOS. It overrides the assembly version dynamically at build-time using `/p:Version` (derived from the pushed tag).
+- **Post-Build Version Syncing**: To ensure the codebase remains in sync with the released version without manual overhead, the final release job (which only runs if all platform builds succeed) checks out the repository, extracts the version from the tag, updates the `<Version>` tag in `MediaDebrid-cli.csproj`, commits the bump, and pushes it back to `main`.
+
+### 8.2 Future-Proofing Branch Protection
+By default, the workflow uses the repository's `GITHUB_TOKEN` to push the version bumps to `main`. If branch protection rules are added to the `main` branch in the future (e.g., blocking direct pushes or requiring status checks), direct pushes from the default token will fail.
+
+To bypass this restriction in the future:
+1. **Create a Personal Access Token (PAT)** (with repo write permissions) or set up a custom **GitHub App**.
+2. **Store it in GitHub Secrets**: Add the PAT or App token as a repository secret (e.g., `RELEASE_PAT`).
+3. **Update Checkout Step**: Modify the `release` job checkout step in [.github/workflows/release.yml](file:///.github/workflows/release.yml) to use this secret token instead of `GITHUB_TOKEN`:
+   ```yaml
+   - name: Checkout repository
+     uses: actions/checkout@v4
+     with:
+       fetch-depth: 0
+       token: ${{ secrets.RELEASE_PAT }}
+   ```
