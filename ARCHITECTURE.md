@@ -59,6 +59,12 @@ To prevent disk fragmentation and ensure immediate file allocation, the app util
 - **`DeviceIoControl`**: Uses the `FSCTL_SET_SPARSE` control code via P/Invoke on Windows.
 - **Benefit**: Allows the OS to allocate the full file size instantly while only occupying the physical space of the downloaded chunks on the drive.
 
+### 2.3 Cancellation & Debrid Torrent Deletion Behavior
+To maintain clean debrid accounts and local storage, the application coordinates cancellation and deletion carefully:
+- **During Wait-For-Cache Phase**: If the user cancels waiting for an uncached torrent to complete on the debrid servers (by pressing `N`), the application automatically issues a deletion command (`DeleteTorrentAsync`) to remove the torrent from their debrid cloud account, ensuring it does not consume active slot limits.
+- **During Active Download Phase**: If the user cancels the download loop (e.g., via `Ctrl+C` or termination) while the files are actively downloading, the torrent is **not** deleted from their debrid account. It remains cached in their debrid cloud database.
+- **Local File Cleanup**: On cancellation, the CLI automatically deletes the temporary `.mdebrid` files on local storage unless the user explicitly saves and exits using the `X` key, in which case the files are preserved for future resume.
+
 ---
 
 ## 3. Heuristic Metadata Resolution (`Features/Metadata_Resolver/MetadataResolver.cs`)
