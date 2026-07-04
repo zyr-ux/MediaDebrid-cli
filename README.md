@@ -4,7 +4,7 @@
 
 </div>
 
-MediaDebrid is a powerful, feature-rich command-line interface (CLI) application built using **.NET 10.0** and C#. It acts as an advanced cloud-resource manager that utilizes the **Real-Debrid API** to efficiently resolve magnet links and manage high-speed downloads directly to your system. 
+MediaDebrid is a powerful, feature-rich command-line interface (CLI) application built using **.NET 10.0** and C#. It acts as an advanced cloud-resource manager that resolves magnet links and manages high-speed downloads directly to your system using debrid services like **Real-Debrid** and **TorBox**.
 
 It features a stunning Terminal User Interface (TUI) powered by Spectre.Console, and under the hood, it handles complex parallel downloads with robust resuming capabilities.
 
@@ -12,21 +12,23 @@ It features a stunning Terminal User Interface (TUI) powered by Spectre.Console,
 
 ## ⚖️ Legal Advisory
 
-**IMPORTANT:** This tool is intended for the management and download of **legally acquired content** and personal files stored via the Real-Debrid service. The developers of MediaDebrid do not condone, encourage, or support the use of this software for the purpose of digital piracy or the unauthorized distribution of copyrighted material. 
+**IMPORTANT:** This tool is intended for the management and download of **legally acquired content** and personal files stored via supported debrid services (Real-Debrid / TorBox). The developers of MediaDebrid do not condone, encourage, or support the use of this software for the purpose of digital piracy or the unauthorized distribution of copyrighted material. 
 
-By using this software, you agree that you are solely responsible for ensuring that your use of the service complies with all applicable laws and the Real-Debrid Terms of Service. The authors are not liable for any misuse of this tool.
+By using this software, you agree that you are solely responsible for ensuring that your use of the service complies with all applicable laws and the respective debrid service's Terms of Service. The authors are not liable for any misuse of this tool.
 
 ---
 
 ## ✨ Features
 
+- **Debrid Provider Agnostic**: Seamlessly supports multiple debrid providers (Real-Debrid and TorBox) via an abstract manager interface.
 - **Magnet Management**: Seamlessly processes magnet links, resolves restricted access URLs, and fetches direct download streams.
 - **Rich Terminal UI**: Beautiful, responsive console interface with live progress bars, spinners, and professional logging.
 - **Advanced Input Handling**: Smooth, animated input prompts with custom manual wrap-around handling for a premium CLI experience.
 - **Segmented / Parallel Downloads**: Splits files into multiple chunks and downloads them concurrently for maximum network throughput.
 - **Robust Resumable Downloads**: Persists download state natively within a 4KB binary footer in the file itself, ensuring zero data loss on interruption.
 - **Smart File Classification**: Advanced signal-based parsing to automatically organize content into logical structures (e.g., Categorized Storage, Software, or Archives).
-- **Interactive Mode**: Launch the app without arguments to enter an intuitive, guided TUI mode for resource selection.
+- **Interactive Mode**: Launch the app without arguments to enter an intuitive, guided TUI mode for resource selection and download setup.
+- **Interactive Onboarding/Setup**: Built-in onboarding flow to configure your preferred debrid provider and API credentials.
 - **Pause/Resume Support**: Gracefully pause or safely save state and exit downloads with simple keyboard shortcuts.
 
 ---
@@ -34,7 +36,7 @@ By using this software, you agree that you are solely responsible for ensuring t
 ## 🚀 Prerequisites
 
 - [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- A [Real-Debrid](https://real-debrid.com/) Account & API Token.
+- A [Real-Debrid](https://real-debrid.com/) or [TorBox](https://torbox.app/) Account & API Token.
 
 ---
 
@@ -108,13 +110,13 @@ winget install MediaDebrid
 
 ### Commands
 
-*   **Interactive Mode** (Guided UI)
+*   **Interactive Mode** (Guided UI & Setup)
     ```bash
     mediadebrid
     ```
 *   **Resolve Magnet Links**
     ```bash
-    mediadebrid unres [magnet_link]
+    mediadebrid unres [magnet]
     ```
 *   **Resume a Download**
     ```bash
@@ -128,6 +130,10 @@ winget install MediaDebrid
     ```bash
     mediadebrid list
     ```
+*   **Run Initial Setup / Onboarding Flow**
+    ```bash
+    mediadebrid setup
+    ```
 
 ---
 
@@ -137,13 +143,18 @@ Configuration is stored in `~AppData/Roaming/MediaDebrid/config.json` (on Window
 
 | Configuration Key | Env Variable | Default Value | Description |
 | :--- | :--- | :--- | :--- |
-| `real_debrid_api_key` | `REAL_DEBRID_API_TOKEN` | *empty* | **Required.** Your Real-Debrid API token. |
+| `debrid_service` | *none* | `real_debrid` | **Required.** Active debrid service (`real_debrid` or `torbox`). |
+| `real_debrid_api_key` | `REAL_DEBRID_API_TOKEN` | *empty* | Real-Debrid API token. Persisted securely in native vaults. |
+| `torbox_api_key` | `TORBOX_API_TOKEN` | *empty* | TorBox API token. Persisted securely in native vaults. |
 | `media_root` | `MEDIA_ROOT` | `~/Downloads/MediaDebrid` | Path for Video content. |
 | `games_root` | `GAMES_ROOT` | `~/Downloads/MediaDebrid` | Path for Software/Games. |
 | `others_root` | `OTHERS_ROOT` | `~/Downloads/MediaDebrid` | Path for miscellaneous files. |
 | `parallel_download` | `PARALLEL_DOWNLOAD_ENABLED` | `true` | Enable segmented downloads. |
 | `connections_per_file` | `CONNECTIONS_PER_FILE` | `8` | Number of parallel connections per file. |
 | `skip_existing_episodes`| `SKIP_EXISTING_EPISODES` | `true` | Skip downloading items that already exist in the library. |
+
+> [!NOTE]
+> Sensitive API tokens (`real_debrid_api_key` and `torbox_api_key`) are saved securely in your platform's native credentials store (Windows Credential Manager, macOS Keychain, or Linux Secret Service via D-Bus) and are automatically ignored/omitted from the public `config.json` file.
 
 ---
 
@@ -174,14 +185,14 @@ The JSON payload contains critical state information:
 ```json
 {
   "MagnetUri": "magnet:?xt=urn:btih:...",
-  "FileId": "rd_file_id_123",
+  "FileId": "file_id_from_debrid_service_123",
   "TotalSize": 1073741824,
   "Segments": [
     { "Start": 0, "End": 268435455, "Current": 150000000 },
     { "Start": 268435456, "End": 536870911, "Current": 268435456 }
   ],
-  "CategoryOverride": "1",
-  "ItemOverride": "4-8"
+  "SeasonOverride": "1",
+  "EpisodeOverride": "4-8"
 }
 ```
 

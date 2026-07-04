@@ -3,7 +3,7 @@
 Welcome to the `MediaDebrid-cli` repository! This document provides AI agents (and human contributors) with essential context, architectural understanding, and coding standards for this project.
 
 ## Project Overview
-`MediaDebrid-cli` is a command-line interface (CLI) application built using **.NET 10.0** and C#. It acts as a powerful, feature-rich downloader utilizing the Real-Debrid API to resolve magnet links and download media files efficiently. It features a rich Terminal User Interface (TUI) for an enhanced user experience, including resumable parallel downloads.
+`MediaDebrid-cli` is a command-line interface (CLI) application built using **.NET 10.0** and C#. It acts as a powerful, feature-rich downloader utilizing debrid services (Real-Debrid / TorBox) to resolve magnet links and download media files efficiently. It features a rich Terminal User Interface (TUI) for an enhanced user experience, including resumable parallel downloads.
 
 ### Core Technologies
 - **.NET 10.0** (C#)
@@ -15,30 +15,46 @@ Welcome to the `MediaDebrid-cli` repository! This document provides AI agents (a
 
 ## Architecture & Directory Structure
 
-The codebase follows a modular structure separating UI, services, and models.
+The codebase is organized cleanly using a feature-based structure to separate concerns.
 
 ### `Program.cs` & `Settings.cs`
-- **`Program.cs`**: The entry point of the application. It configures `System.CommandLine`, parses arguments, routes commands (interactive, `unres`, `resume`, `set`), loads environment variables (via `DotNetEnv`), and boots up the `TuiApp`.
-- **`Settings.cs`**: Manages application-level settings, integrating both CLI arguments and `.env` configurations.
+- **`Program.cs`**: The entry point of the application. It configures `System.CommandLine`, parses arguments, routes commands (interactive, `unres`, `resume`, `set`, `setup`), loads environment variables, and boots up the `TuiApp`.
+- **`Settings.cs`**: Manages application-level settings, integrating both CLI arguments, `.env` configurations, and native secure vault credentials.
 
 ### `Tui/` (Terminal UI)
-- **`TuiApp.cs`**: The core of the user interface. It manages the Spectre.Console components (e.g., `Progress`, layouts, panels, tables). It is responsible for orchestrating the overall flow, displaying download progress, handling user input for cancellation/pausing, and logging formatted status messages.
-- **`PrintGap.cs`**: **CRITICAL** - Central stateful spacing manager that coordinates all console output margins. It tracks if the console has already printed a newline, preventing double gaps and managing progress bar padding.
+- **`Tui/TuiApp.cs`**: The core of the user interface. It manages the Spectre.Console components (e.g., `Progress`, layouts, panels, tables). It is responsible for orchestrating the overall flow, displaying download progress, handling user input for cancellation/pausing, and logging formatted status messages.
+- **`Tui/PrintGap.cs`**: **CRITICAL** - Central stateful spacing manager that coordinates all console output margins. It tracks if the console has already printed a newline, preventing double gaps and managing progress bar padding.
+- **`Tui/Components.cs`**: UI templates and prompts (onboarding setup, configuration listing, logo showing, text inputs).
 
-### `Services/` (Core Business Logic)
-This directory contains the heavy lifting of the application.
-- **`RealDebridClient.cs`**: Handles all HTTP interactions with the Real-Debrid API (adding magnets, selecting files, un-restricting links).
-- **`Downloader.cs`**: Manages the actual file downloading process. It supports segmented (parallel) downloads, persistent resume capabilities, and precise speed/ETA calculations.
-- **`MetadataResolver.cs`**: The **unified engine** for all media metadata identification. It uses sophisticated signal-based heuristics to categorize content and extract season/episode data. All name-to-metadata parsing MUST be routed through this class to ensure consistency.
-- **`MagnetParser.cs`**: Utility for parsing and validating magnet link structures.
-- **`PathGenerator.cs`**: Constructs clean, organized, and valid file system paths for the downloaded media based on its metadata.
-- **`Utils.cs`**: General utility methods (e.g., formatting byte sizes to human-readable strings, extracting names).
+### `Features/` (Core Feature Components)
+Contains modular subdirectories containing business logic:
+- **`Features/Debrid_Manager/`**:
+  - `IDebridClient.cs`: Unified abstraction interface for all debrid services.
+  - `RealDebridClient.cs` / `TorBoxClient.cs`: Endpoints wrapper for Real-Debrid and TorBox respectively.
+- **`Features/Download_Manager/`**:
+  - `Downloader.cs`: Manages parallel chunk downloading and state finalization.
+  - `MagnetParser.cs`: Parses and validates magnet structures.
+  - `MediaWorkflowService.cs`: Orchestrates flow transitions between adding magnet, waiting for debrid caching/completion, and starting downloading.
+- **`Features/Metadata_Resolver/`**:
+  - `MetadataResolver.cs`: The **unified engine** for all media metadata identification. It uses signal-based heuristics to categorize content and extract season/episode data. All name-to-metadata parsing MUST be routed through this class to ensure consistency.
+  - `PathGenerator.cs`: Constructs clean, organized, and valid file system paths for the downloaded media based on its metadata.
+- **`Features/Secrets_Manager/`**:
+  - `ISecureStorage.cs`: Abstract secure storage wrapper.
+  - `SecretsManagerFactory.cs`: Factory returning platform-specific secure storage.
+  - `SecureStorageWindows.cs` / `SecureStorageMacOS.cs` / `SecureStorageLinux.cs`: System-specific secure credential vault drivers.
+
+### `Utilities/`
+- **`Utilities/Utils.cs`**: General utility methods (formatting byte sizes, range parsing, configuration updating).
 
 ### `Models/` (Data Structures & Errors)
 Contains POCO classes, DTOs, and application state objects.
-- **`Exceptions.cs`**: **CRITICAL** - This file centralizes all custom exceptions (e.g., `RealDebridException`, `DownloadCancelledException`, `FileSelectionException`). Always use these predefined exceptions rather than throwing generic `Exception`s.
-- **`RealDebridModels.cs`**: JSON mapping models for Real-Debrid API responses.
-- **`DownloadProgressModel.cs` & `ResumeMetadata.cs`**: Models tracking the state of active and resumable downloads.
+- **`Exceptions.cs`**: **CRITICAL** Centralizes custom exceptions (e.g., `RealDebridApiException`, `TorBoxApiException`, `TerminationException`, `DownloadException`). Always use these predefined exceptions rather than throwing generic `Exception`s.
+- **`RealDebridModels.cs` & `TorBoxModels.cs`**: JSON mapping models for Real-Debrid and TorBox API responses.
+- **`DownloadProgressModel.cs` & `ResumeMetadata.cs`**: Models tracking active/resumable download states.
+- **`AppSettings.cs`**: Structure mapping all configurations.
+
+### `Serialization/`
+- **`AppSettingsJsonContext.cs` & `MediaDebridJsonContext.cs`**: Native AOT-compatible JSON serialization context definitions.
 
 ---
 
@@ -68,7 +84,7 @@ When modifying or generating code for `MediaDebrid-cli`, adhere strictly to the 
 - **C# 12/13 Features**: Utilize modern C# features like primary constructors, collection expressions (`[]`), and raw string literals where they improve readability.
 
 ### 5. Resumable Downloads
-- The `Downloader.cs` uses a 4KB file footer to store JSON metadata (`ResumeMetadata`) allowing downloads to persist across application restarts. When modifying download logic, ensure this metadata is correctly parsed, updated, and re-written, avoiding data corruption.
+- The `Features/Download_Manager/Downloader.cs` uses a 4KB file footer to store JSON metadata (`ResumeMetadata`) allowing downloads to persist across application restarts. When modifying download logic, ensure this metadata is correctly parsed, updated, and re-written, avoiding data corruption.
 - **Metadata Overrides**: Season and episode overrides are stored as `string?` to support complex ranges (e.g., `4-8`, `1,3,5`). The application utilizes `Utils.ParseRange` for validation and filtering. These selections are persisted in the `ResumeMetadata` footer.
 
 ---

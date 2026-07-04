@@ -2,11 +2,11 @@
 
 This document provides a deep-dive into the custom engineering and architectural decisions that make `MediaDebrid-cli` a robust and high-performance media downloader.
 
-## 1. Custom TUI Framework (`TuiApp.cs`)
+## 1. Custom TUI Framework (`Tui/TuiApp.cs`)
 
 The application utilizes `Spectre.Console` for its rich Terminal User Interface (TUI), but extends it significantly with custom components to handle high-volume data and complex input scenarios.
 
-### 1.1 Typewriter Input Reader (`ReadLineWithEffectAsync`)
+### 1.1 Typewriter Input Reader (`ReadLineWithEffectAsync` in `Tui/Components.cs`)
 To solve standard terminal wrapping bugs where the cursor gets "stuck" at the left edge when backspacing long strings, we implemented a custom key-listening loop.
 
 - **Mechanism**: Uses `Console.ReadKey(intercept: true)` to process raw keystrokes.
@@ -24,9 +24,9 @@ Standard progress bars lack the domain-specific data needed for media downloadin
 ### 1.3 Execution Modes
 `TuiApp` handles multiple operational modes routed from the CLI:
 - **Interactive Download**: Prompts for magnets, handles season/episode selection, and downloads the files.
-- **Unrestricted Link Generation (`unres`)**: Follows the same selection flow but bypasses the downloader entirely, instead outputting direct Real-Debrid download URLs to the terminal for external use.
+- **Unrestricted Link Generation (`unres`)**: Follows the same selection flow but bypasses the downloader entirely, instead outputting direct download URLs to the terminal for external use.
 
-### 1.4 Stateful Spacing Engine (`PrintGap.cs`)
+### 1.4 Stateful Spacing Engine (`Tui/PrintGap.cs`)
 To eliminate manual layout flags (e.g., `needsNewline`) and prevent ugly double-spacing (negative space) in terminal layouts, we built a modular, state-tracking spacing engine.
 
 - **Mechanism**: Maintains an in-memory `_hasGap` flag.
@@ -37,7 +37,7 @@ To eliminate manual layout flags (e.g., `needsNewline`) and prevent ugly double-
 
 ---
 
-## 2. Resumable Download Engine (`Services/Downloader.cs`)
+## 2. Resumable Download Engine (`Features/Download_Manager/Downloader.cs`)
 
 The core of the application is a high-performance, segmented downloader designed to survive application restarts and network failures.
 
@@ -48,9 +48,10 @@ Unlike traditional downloaders that use sidecar files (e.g., `.part` files), `Me
 - **Magic Marker**: The last 8 bytes are the ASCII string `MDEBRID!`. This allows the app to instantly verify if a file was created by this application.
 - **JSON Metadata**: The area preceding the marker stores a `ResumeMetadata` object containing:
   - Original Magnet URI.
-  - File ID on Real-Debrid.
+  - File ID on the debrid service.
   - Total file size.
   - Progress state for every parallel segment (Start, End, and Current byte offsets).
+  - Selected season/episode override configurations (`SeasonOverride` and `EpisodeOverride`).
 - **Finalization**: Upon completion, the downloader reads the metadata, truncates the file to its original size (removing the 4KB footer), and moves it to the final destination.
 
 ### 2.2 Sparse File Support
@@ -60,7 +61,7 @@ To prevent disk fragmentation and ensure immediate file allocation, the app util
 
 ---
 
-## 3. Heuristic Metadata Resolution (`Services/MetadataResolver.cs`)
+## 3. Heuristic Metadata Resolution (`Features/Metadata_Resolver/MetadataResolver.cs`)
 
 `MetadataResolver` serves as the **centralized engine** for all name-to-metadata parsing across the application. It replaces brittle, ad-hoc regex extraction with a sophisticated **Signal-Based Heuristic Engine** that identifies content without querying external databases.
 
@@ -80,12 +81,16 @@ To prevent disk fragmentation and ensure immediate file allocation, the app util
 To maintain a clean TUI, errors are not simply thrown; they are **Polymorphic**.
 
 - **`IPrintableException`**: An interface implemented by all custom exceptions.
-- **The `Print()` Pattern**: Exceptions like `RealDebridApiException` or `MagnetException` contain their own rendering logic using `Spectre.Console`. 
+- **The `Print()` Pattern**: Custom exceptions contain their own rendering logic using `Spectre.Console`. Exceptions include:
+  - `RealDebridApiException` / `TorBoxApiException`: Renders formatted debrid-specific API response failures.
+  - `ConfigurationException`: Outlines invalid configuration setups.
+  - `MagnetException`: Handles malformed magnet link parsing.
+  - `DownloadException`: Catches connection drops or segment failures.
 - **Graceful Termination**: The `TerminationException` is a specialized `OperationCanceledException` that provides a red error message to the user before safely exiting the download loop, ensuring that partial files are handled according to user settings.
 
 ---
 
-## 5. Directory Organization (`Services/PathGenerator.cs`)
+## 5. Directory Organization (`Features/Metadata_Resolver/PathGenerator.cs`)
 
 Downloads are automatically sorted into a logical hierarchy:
 - **Movies**: `MediaRoot/Movies/Title (Year)/Filename.mkv`
@@ -95,3 +100,26 @@ Downloads are automatically sorted into a logical hierarchy:
 
 ### 5.1 Dynamic Season Resolution
 When a user selects a range of seasons (e.g., `1-3`) or downloads all seasons from a pack, the `PathGenerator` performs **Per-File Resolution**. Instead of relying on a single global season setting, it utilizes the `MetadataResolver` to parse the filename of each unrestricted link to determine its specific `Season XX` folder, ensuring a perfectly organized local library even in complex multi-season runs.
+
+---
+
+## 6. Debrid Provider Manager (`Features/Debrid_Manager/`)
+
+The application supports multiple debrid providers by abstracting core debrid actions.
+
+- **`IDebridClient` Interface**: Exposes provider-agnostic operations for checking caching status, adding magnets, selecting file payloads, un-restricting links, and fetching torrent metadata.
+- **`RealDebridClient`**: Connects to the Real-Debrid API using `HttpClient`. Handles REST requests, handles pagination/polling, and throws `RealDebridApiException`.
+- **`TorBoxClient`**: Connects to the TorBox API. Implements the same `IDebridClient` operations via TorBox endpoints and throws `TorBoxApiException`.
+- **Configuration-Driven Instantiation**: The active debrid client is chosen based on the `debrid_service` setting (`real_debrid` or `torbox`), loaded at runtime.
+
+---
+
+## 7. Secure Storage & Secrets Manager (`Features/Secrets_Manager/`)
+
+To prevent API tokens from being accidentally checked into source control or exposed in public configuration files, `MediaDebrid-cli` stores API keys inside the platform's native credentials vault.
+
+- **`ISecureStorage` Interface**: Defines async operations for `SaveAsync`, `LoadAsync`, and `DeleteAsync`.
+- **`SecretsManagerFactory`**: Detects the host OS at runtime and instantiates the correct platform implementation:
+  - **Windows (`SecureStorageWindows`)**: Integrates with the Win32 Credential Manager (`advapi32.dll` via P/Invoke) to store generic credentials prefixed with `MediaDebrid:`.
+  - **macOS (`SecureStorageMacOS`)**: Integrates with the macOS Keychain (`Security.framework`) using native CFString, CFData, and SecItem API P/Invokes.
+  - **Linux (`SecureStorageLinux`)**: Uses DBus (`Tmds.DBus` library) to communicate with the FreeDesktop Secret Service (`org.freedesktop.secrets`). If no session bus is available, it falls back to a locally encrypted JSON file (`linux_secrets.json`) secured with AES-GCM (128-bit key derived using PBKDF2/SHA-512 from the machine ID and current user).
