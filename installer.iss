@@ -25,7 +25,7 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 
-SetupIconFile=Logos/logo-dark-win.ico
+SetupIconFile=Assets/logo-dark-win.ico
 WizardStyle=modern
 
 DefaultDirName={localappdata}\Programs\{#MyAppName}

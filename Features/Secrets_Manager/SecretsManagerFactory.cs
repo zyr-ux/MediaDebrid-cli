@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace MediaDebrid_cli.SecretsManager;
+namespace MediaDebrid_cli.Features.Secrets_Manager;
 
 public static class SecretsManagerFactory
 {

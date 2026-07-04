@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaDebrid_cli.Models;
 
-namespace MediaDebrid_cli.Services;
+namespace MediaDebrid_cli.Features.Debrid_Manager;
 
 public class TorBoxClient : IDebridClient
 {

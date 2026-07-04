@@ -4,8 +4,10 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
 using MediaDebrid_cli.Models;
+using MediaDebrid_cli.Features.Metadata_Resolver;
+using MediaDebrid_cli.Utilities;
 
-namespace MediaDebrid_cli.Services;
+namespace MediaDebrid_cli.Features.Download_Manager;
 
 public class Downloader
 {

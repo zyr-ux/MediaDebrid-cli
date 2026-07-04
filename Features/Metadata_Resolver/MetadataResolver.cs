@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using MediaDebrid_cli.Models;
 
-namespace MediaDebrid_cli.Services;
+namespace MediaDebrid_cli.Features.Metadata_Resolver;
 
 public partial class MetadataResolver
 {

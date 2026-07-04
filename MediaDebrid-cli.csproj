@@ -9,7 +9,7 @@
         <Nullable>enable</Nullable>
         <Version>1.0.9</Version>
         <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-        <ApplicationIcon>Logos\logo-dark-win.ico</ApplicationIcon>
+        <ApplicationIcon>Assets\logo-dark-win.ico</ApplicationIcon>
     </PropertyGroup>
 
     <ItemGroup>

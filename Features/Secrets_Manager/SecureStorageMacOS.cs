@@ -7,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 
-namespace MediaDebrid_cli.SecretsManager;
+namespace MediaDebrid_cli.Features.Secrets_Manager;
 
 [SupportedOSPlatform("macos")]
 public sealed class SecureStorageMacOS : ISecureStorage

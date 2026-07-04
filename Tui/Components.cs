@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
 using MediaDebrid_cli.Models;
-using MediaDebrid_cli.Services;
+using MediaDebrid_cli.Features.Debrid_Manager;
+using MediaDebrid_cli.Features.Download_Manager;
+using MediaDebrid_cli.Features.Metadata_Resolver;
+using MediaDebrid_cli.Utilities;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using System.Text;

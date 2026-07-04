@@ -1,6 +1,6 @@
 <div align="center">
 
-![MediaDebrid Logo](Logos/full-logo-transparent.svg)
+![MediaDebrid Logo](Assets/full-logo-transparent.svg)
 
 </div>
 

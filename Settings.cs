@@ -1,7 +1,7 @@
 using System.Text.Json;
 using DotNetEnv;
 using MediaDebrid_cli.Models;
-using MediaDebrid_cli.SecretsManager;
+using MediaDebrid_cli.Features.Secrets_Manager;
 
 namespace MediaDebrid_cli;
 

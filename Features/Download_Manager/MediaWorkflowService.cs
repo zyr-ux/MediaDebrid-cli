@@ -1,6 +1,10 @@
 using MediaDebrid_cli.Models;
 
-namespace MediaDebrid_cli.Services;
+using MediaDebrid_cli.Features.Debrid_Manager;
+using MediaDebrid_cli.Features.Metadata_Resolver;
+using MediaDebrid_cli.Utilities;
+
+namespace MediaDebrid_cli.Features.Download_Manager;
 
 public class MediaWorkflowService(IDebridClient client, MetadataResolver resolver)
 {

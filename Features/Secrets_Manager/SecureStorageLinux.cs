@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using MediaDebrid_cli.Serialization;
 using Tmds.DBus;
 
-namespace MediaDebrid_cli.SecretsManager;
+namespace MediaDebrid_cli.Features.Secrets_Manager;
 
 [UnsupportedOSPlatform("windows")]
 public sealed class SecureStorageLinux : ISecureStorage, IDisposable

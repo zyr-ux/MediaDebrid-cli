@@ -2,8 +2,9 @@ using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json.Serialization;
 using MediaDebrid_cli.Models;
+using MediaDebrid_cli.Features.Metadata_Resolver;
 
-namespace MediaDebrid_cli.Services;
+namespace MediaDebrid_cli.Utilities;
 
 public static class Utils
 {

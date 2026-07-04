@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 
-namespace MediaDebrid_cli.SecretsManager;
+namespace MediaDebrid_cli.Features.Secrets_Manager;
 
 public interface ISecureStorage
 {

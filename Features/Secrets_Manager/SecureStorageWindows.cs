@@ -5,7 +5,7 @@ using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MediaDebrid_cli.SecretsManager;
+namespace MediaDebrid_cli.Features.Secrets_Manager;
 
 [SupportedOSPlatform("windows")]
 public sealed class SecureStorageWindows : ISecureStorage
