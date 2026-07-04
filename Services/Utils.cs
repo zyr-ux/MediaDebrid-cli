@@ -62,9 +62,10 @@ public static class Utils
                     Settings.Save();
                     return (true, $"Successfully updated '{propName}' to '{value}'", propName);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    return (false, $"Failed to convert '{value}' to type {prop.PropertyType.Name} for key '{propName}'", propName);
+                    var errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                    return (false, $"Failed to set key '{propName}': {errorMsg}", propName);
                 }
             }
         }

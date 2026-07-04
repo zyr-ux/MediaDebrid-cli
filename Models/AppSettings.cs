@@ -5,10 +5,36 @@ namespace MediaDebrid_cli.Models;
 
 public class AppSettings
 {
+    private string _debridService = "real_debrid";
+
+    [JsonPropertyName("debrid_service")]
+    [Description("Active debrid service (real_debrid or torbox) (default: real_debrid)")]
+    public string DebridService
+    {
+        get => _debridService;
+        set
+        {
+            var clean = value?.Trim().ToLower();
+            if (clean == "real_debrid" || clean == "torbox")
+            {
+                _debridService = clean;
+            }
+            else
+            {
+                throw new ArgumentException("debrid_service must be either 'real_debrid' or 'torbox'.");
+            }
+        }
+    }
+
     [JsonPropertyName("real_debrid_api_key")]
     [Description("Required. Your Real-Debrid API token")]
     [JsonIgnore]
     public string RealDebridApiToken { get; set; } = "";
+
+    [JsonPropertyName("torbox_api_key")]
+    [Description("Required. Your TorBox API token")]
+    [JsonIgnore]
+    public string TorBoxApiToken { get; set; } = "";
 
     [JsonPropertyName("media_root")]
     [Description("Download path for Movies & Shows (default: Downloads/MediaDebrid)")]

@@ -23,7 +23,9 @@ public static class Settings
     );
 
     // Properties for backward compatibility with the rest of the application
+    public static string DebridService => Instance.DebridService;
     public static string RealDebridApiToken => Instance.RealDebridApiToken;
+    public static string TorBoxApiToken => Instance.TorBoxApiToken;
     public static string MediaRoot => IsDefault(Instance.MediaRoot) ? DefaultBaseRoot : Instance.MediaRoot;
     public static string GamesRoot => IsDefault(Instance.GamesRoot) ? DefaultBaseRoot : Instance.GamesRoot;
     public static string OthersRoot => IsDefault(Instance.OthersRoot) ? DefaultBaseRoot : Instance.OthersRoot;
@@ -49,7 +51,7 @@ public static class Settings
         // 2. Always load .env file to ensure environment variables are available
         try { Env.TraversePath().Load(); } catch { }
 
-        // 3. Try to load token from secure storage (Primary Source)
+        // 3. Try to load tokens from secure storage (Primary Source)
         string? secureToken = null;
         try
         {
@@ -75,6 +77,33 @@ public static class Settings
                     SecretsManagerFactory.GetStorage().SaveAsync("RealDebridToken", envToken).GetAwaiter().GetResult();
                 }
                 catch { /* Failed to migrate, but we can still use the env token for this session */ }
+            }
+        }
+
+        // Load TorBox token
+        string? secureTorBoxToken = null;
+        try
+        {
+            secureTorBoxToken = SecretsManagerFactory.GetStorage().LoadAsync("TorBoxToken").GetAwaiter().GetResult();
+        }
+        catch { /* Secure storage unavailable or empty */ }
+
+        if (!string.IsNullOrWhiteSpace(secureTorBoxToken))
+        {
+            Instance.TorBoxApiToken = secureTorBoxToken;
+        }
+        else
+        {
+            // AUTOMATIC MIGRATION: Check environment variables
+            var envTorBoxToken = Environment.GetEnvironmentVariable("TORBOX_API_TOKEN");
+            if (!string.IsNullOrWhiteSpace(envTorBoxToken))
+            {
+                Instance.TorBoxApiToken = envTorBoxToken;
+                try
+                {
+                    SecretsManagerFactory.GetStorage().SaveAsync("TorBoxToken", envTorBoxToken).GetAwaiter().GetResult();
+                }
+                catch { }
             }
         }
 
@@ -105,7 +134,7 @@ public static class Settings
         var json = JsonSerializer.Serialize(Instance, Serialization.AppSettingsJsonContext.Default.AppSettings);
         File.WriteAllText(ConfigFilePath, json);
         
-        // Save sensitive API token to secure vault
+        // Save sensitive API tokens to secure vault
         if (!string.IsNullOrWhiteSpace(Instance.RealDebridApiToken))
         {
             try
@@ -116,6 +145,17 @@ public static class Settings
             {
                 // If vault fails during a manual save, we might want to log it or warn the user,
                 // but we shouldn't crash the JSON save.
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(Instance.TorBoxApiToken))
+        {
+            try
+            {
+                SecretsManagerFactory.GetStorage().SaveAsync("TorBoxToken", Instance.TorBoxApiToken).GetAwaiter().GetResult();
+            }
+            catch
+            {
             }
         }
     }
@@ -133,6 +173,10 @@ public static class Settings
 
     public static bool IsConfigured()
     {
+        if (Instance.DebridService == "torbox")
+        {
+            return !string.IsNullOrWhiteSpace(Instance.TorBoxApiToken);
+        }
         return !string.IsNullOrWhiteSpace(Instance.RealDebridApiToken);
     }
 }

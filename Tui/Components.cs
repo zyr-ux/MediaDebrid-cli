@@ -121,7 +121,9 @@ public static class Components
         {
             string value = key switch
             {
+                "debrid_service" => Settings.Instance.DebridService,
                 "real_debrid_api_key" => Settings.Instance.RealDebridApiToken,
+                "torbox_api_key" => Settings.Instance.TorBoxApiToken,
                 "media_root" => Settings.IsDefault(Settings.Instance.MediaRoot) ? $"default ({Settings.MediaRoot})" : Settings.Instance.MediaRoot,
                 "games_root" => Settings.IsDefault(Settings.Instance.GamesRoot) ? $"default ({Settings.GamesRoot})" : Settings.Instance.GamesRoot,
                 "others_root" => Settings.IsDefault(Settings.Instance.OthersRoot) ? $"default ({Settings.OthersRoot})" : Settings.Instance.OthersRoot,
@@ -131,10 +133,16 @@ public static class Components
                 _ => "N/A"
             };
 
-            // Highlight the API key differently
-            var displayValue = key == "real_debrid_api_key" && !string.IsNullOrEmpty(value)
-                ? $"[green]{value}[/]"
-                : $"[white]{value}[/]";
+            // Highlight and mask API keys for security
+            string displayValue;
+            if (key == "real_debrid_api_key" || key == "torbox_api_key")
+            {
+                displayValue = !string.IsNullOrEmpty(value) ? "[green]Configured[/]" : "[red]Not Configured[/]";
+            }
+            else
+            {
+                displayValue = $"[white]{value}[/]";
+            }
 
             table.AddRow(
                 $"[yellow]{key}[/]",
@@ -156,6 +164,8 @@ public static class Components
         sb.AppendLine("  mediadebrid-cli <command> [options]");
         sb.AppendLine();
         sb.AppendLine("COMMANDS");
+        sb.AppendLine($"  {"unres [magnet]",-30} - Generate unrestricted links instead of downloading");
+        sb.AppendLine($"  {"setup",-30} - Run the interactive initial setup/onboarding flow");
         sb.AppendLine($"  {"resume <path>",-30} - Resume download from .mdebrid file");
         sb.AppendLine($"  {"set <key> <value>",-30} - Set a configuration value");
         sb.AppendLine($"  {"list",-30} - Show current configuration");
@@ -177,9 +187,9 @@ public static class Components
         return sb.ToString();
     }
 
-    public static async Task EnsureConfiguredAsync(CancellationToken cancellationToken)
+    public static async Task EnsureConfiguredAsync(CancellationToken cancellationToken, bool forceOnboarding = false)
     {
-        if (Settings.IsConfigured()) return;
+        if (!forceOnboarding && Settings.IsConfigured()) return;
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -189,13 +199,52 @@ public static class Components
 
         try
         {
-            if (string.IsNullOrWhiteSpace(Settings.Instance.RealDebridApiToken))
+            // Prompt for which service to configure
+            string? choice = null;
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                PrintGap.MarkupLine("[bold]Select Debrid service to configure:[/]");
+                PrintGap.MarkupLine("  1. TorBox");
+                PrintGap.MarkupLine("  2. Real-Debrid");
+                PrintGap.MarkupLine("  3. Both (All)");
+                choice = await ReadLineWithEffectAsync("Enter choice [green][[1-3]][/]", cancellationToken);
+                if (cancellationToken.IsCancellationRequested) break;
+
+                choice = choice?.Trim();
+                if (choice == "1" || choice == "2" || choice == "3")
+                {
+                    break;
+                }
+                PrintGap.MarkupLine("[red]Invalid selection. Please choose 1, 2, or 3.[/]");
+                PrintGap.Print();
+            }
+
+            if (cancellationToken.IsCancellationRequested) return;
+
+            if (choice == "1" || choice == "3")
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var token = await ReadLineWithEffectAsync("Enter [green]TorBox API Key[/]", cancellationToken, secret: true);
+                    if (cancellationToken.IsCancellationRequested) break;
+
+                    if (string.IsNullOrWhiteSpace(token))
+                    {
+                        PrintGap.MarkupLine("[red]Key cannot be empty.[/]");
+                        continue;
+                    }
+                    Settings.Instance.TorBoxApiToken = token;
+                    break;
+                }
+            }
+
+            if (choice == "2" || choice == "3")
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     var token = await ReadLineWithEffectAsync("Enter [green]Real-Debrid API Key[/]", cancellationToken, secret: true);
                     if (cancellationToken.IsCancellationRequested) break;
-                    
+
                     if (string.IsNullOrWhiteSpace(token))
                     {
                         PrintGap.MarkupLine("[red]Key cannot be empty.[/]");
@@ -206,22 +255,65 @@ public static class Components
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(Settings.Instance.MediaRoot))
+            if (cancellationToken.IsCancellationRequested) return;
+
+            // Set default / active debrid service
+            if (choice == "1")
             {
-                var root = await ReadLineWithEffectAsync("Enter [green]Movies/Shows Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
-                Settings.Instance.MediaRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
+                Settings.Instance.DebridService = "torbox";
+            }
+            else if (choice == "2")
+            {
+                Settings.Instance.DebridService = "real_debrid";
+            }
+            else if (choice == "3")
+            {
+                string? activeChoice = null;
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    PrintGap.Print();
+                    PrintGap.MarkupLine("[bold]Which service would you like to set as active by default?[/]");
+                    PrintGap.MarkupLine("  1. TorBox");
+                    PrintGap.MarkupLine("  2. Real-Debrid");
+                    activeChoice = await ReadLineWithEffectAsync("Enter choice [green][[1-2]][/]", cancellationToken);
+                    if (cancellationToken.IsCancellationRequested) break;
+
+                    activeChoice = activeChoice?.Trim();
+                    if (activeChoice == "1")
+                    {
+                        Settings.Instance.DebridService = "torbox";
+                        break;
+                    }
+                    else if (activeChoice == "2")
+                    {
+                        Settings.Instance.DebridService = "real_debrid";
+                        break;
+                    }
+                    PrintGap.MarkupLine("[red]Invalid selection. Please choose 1 or 2.[/]");
+                }
             }
 
-            if (string.IsNullOrWhiteSpace(Settings.Instance.GamesRoot))
+            if (cancellationToken.IsCancellationRequested) return;
+
+            if (forceOnboarding || string.IsNullOrWhiteSpace(Settings.Instance.MediaRoot))
             {
-                var root = await ReadLineWithEffectAsync("Enter [green]Games Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
-                Settings.Instance.GamesRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
+                var defaultVal = string.IsNullOrWhiteSpace(Settings.Instance.MediaRoot) ? Settings.DefaultBaseRoot : Settings.Instance.MediaRoot;
+                var root = await ReadLineWithEffectAsync("Enter [green]Movies/Shows Root Path[/]", cancellationToken, defaultValue: defaultVal);
+                Settings.Instance.MediaRoot = string.IsNullOrWhiteSpace(root) ? defaultVal : root;
             }
 
-            if (string.IsNullOrWhiteSpace(Settings.Instance.OthersRoot))
+            if (forceOnboarding || string.IsNullOrWhiteSpace(Settings.Instance.GamesRoot))
             {
-                var root = await ReadLineWithEffectAsync("Enter [green]Miscellaneous Downloads Root Path[/]", cancellationToken, defaultValue: Settings.DefaultBaseRoot);
-                Settings.Instance.OthersRoot = string.IsNullOrWhiteSpace(root) ? Settings.DefaultBaseRoot : root;
+                var defaultVal = string.IsNullOrWhiteSpace(Settings.Instance.GamesRoot) ? Settings.DefaultBaseRoot : Settings.Instance.GamesRoot;
+                var root = await ReadLineWithEffectAsync("Enter [green]Games Root Path[/]", cancellationToken, defaultValue: defaultVal);
+                Settings.Instance.GamesRoot = string.IsNullOrWhiteSpace(root) ? defaultVal : root;
+            }
+
+            if (forceOnboarding || string.IsNullOrWhiteSpace(Settings.Instance.OthersRoot))
+            {
+                var defaultVal = string.IsNullOrWhiteSpace(Settings.Instance.OthersRoot) ? Settings.DefaultBaseRoot : Settings.Instance.OthersRoot;
+                var root = await ReadLineWithEffectAsync("Enter [green]Miscellaneous Downloads Root Path[/]", cancellationToken, defaultValue: defaultVal);
+                Settings.Instance.OthersRoot = string.IsNullOrWhiteSpace(root) ? defaultVal : root;
             }
         }
         catch (OperationCanceledException)

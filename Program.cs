@@ -128,6 +128,16 @@ internal static class Program
         
         rootCommand.Subcommands.Add(resumeCommand);
 
+        // ── setup Command ───────────────────────────────────────────────────
+        var setupCommand = new Command("setup", "Run the interactive initial setup/onboarding flow");
+        setupCommand.SetAction(async (parseResult, cancellationToken) =>
+        {
+            Components.ShowLogo();
+            await Components.EnsureConfiguredAsync(cts.Token, forceOnboarding: true);
+        });
+
+        rootCommand.Subcommands.Add(setupCommand);
+
         // ── Customize help to show logo + description for root command ──
         for (int i = 0; i < rootCommand.Options.Count; i++)
         {
