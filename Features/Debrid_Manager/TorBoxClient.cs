@@ -151,7 +151,7 @@ public class TorBoxClient : IDebridClient
             if (!root.TryGetProperty("success", out var success) || !success.GetBoolean()) return false;
             if (!root.TryGetProperty("data", out var data)) return false;
 
-            // format=list: data is [{hash, cached}, ...]
+            // format=list: data is [{hash, name, size, files}, ...] or [{hash, cached}, ...]
             if (data.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in data.EnumerateArray())
@@ -162,20 +162,27 @@ public class TorBoxClient : IDebridClient
                         {
                             return cached.GetBoolean();
                         }
+                        return true; // The presence of the item in the list implies it is cached
                     }
                 }
             }
-            // format=object fallback: data is { "hash": true/false }
+            // format=object fallback: data is { "hash": {name, size, hash} } or { "hash": true/false }
             else if (data.ValueKind == JsonValueKind.Object)
             {
-                if (data.TryGetProperty(hash.ToLowerInvariant(), out var val) && val.ValueKind == JsonValueKind.True)
+                if (data.TryGetProperty(hash.ToLowerInvariant(), out var val))
                 {
-                    return true;
+                    if (val.ValueKind == JsonValueKind.True || val.ValueKind == JsonValueKind.Object)
+                    {
+                        return true;
+                    }
                 }
                 // Also try original case
-                if (data.TryGetProperty(hash, out var val2) && val2.ValueKind == JsonValueKind.True)
+                if (data.TryGetProperty(hash, out var val2))
                 {
-                    return true;
+                    if (val2.ValueKind == JsonValueKind.True || val2.ValueKind == JsonValueKind.Object)
+                    {
+                        return true;
+                    }
                 }
             }
         }
@@ -191,7 +198,7 @@ public class TorBoxClient : IDebridClient
         var matched = await FindTorrentByHashAsync(hash, cancellationToken);
         if (matched != null)
         {
-            var isCached = matched.Status == "downloaded" || matched.Status == "waiting_files_selection";
+            var isCached = await CheckCacheOfHashAsync(hash, cancellationToken);
             return (matched.Id, matched, isCached, false);
         }
 

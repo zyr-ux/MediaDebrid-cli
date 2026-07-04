@@ -42,7 +42,7 @@ public class TorBoxTorrentItem
     [JsonPropertyName("size")]
     public long Size { get; set; }
 
-    [JsonPropertyName("status")]
+    [JsonPropertyName("download_state")]
     public string Status { get; set; } = string.Empty;
 
     [JsonPropertyName("files")]
@@ -65,6 +65,12 @@ public class TorBoxCheckCachedItem
 {
     [JsonPropertyName("hash")]
     public string Hash { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("size")]
+    public long Size { get; set; }
 
     [JsonPropertyName("cached")]
     public bool Cached { get; set; }
