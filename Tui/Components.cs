@@ -164,7 +164,7 @@ public static class Components
         sb.AppendLine("Magnet → Media Downloader");
         sb.AppendLine();
         sb.AppendLine("USAGE");
-        sb.AppendLine("  mediadebrid-cli <command> [options]");
+        sb.AppendLine("  mediadebrid <command> [options]");
         sb.AppendLine();
         sb.AppendLine("COMMANDS");
         sb.AppendLine($"  {"unres [magnet]",-30} - Generate unrestricted links instead of downloading");
